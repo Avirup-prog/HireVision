@@ -1,0 +1,71 @@
+# ============================================
+# HireVision - .gitignore
+# ============================================
+
+# Environment variables & secrets (CRITICAL: Never commit API keys)
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Python Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Frontend Dependencies & Build Output
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+*.local
+
+# User uploads & Temporary Candidate Data (Preserves upload directory structure)
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/uploads/resumes/*
+!backend/uploads/resumes/.gitkeep
+
+# Temporary scratch & patch scripts
+*.backup
+fix*.py
+shrink_cards.py
+test.html
+test_nlp.py
+update_auth.py
+
+# Editor & OS files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+Desktop.ini
