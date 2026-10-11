@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 import { 
   Camera, Mic, CheckCircle2, AlertCircle, Save, Video, 
@@ -7,16 +7,35 @@ import {
   Home, List, FileText, UserCircle, Briefcase, Clock,
   ShieldCheck, AlertTriangle, UserCheck, RefreshCw, Sparkles, CheckCircle,
   Trash2, ExternalLink, Plus, Eye,
-  Award, ChevronRight, Brain, Calendar, TrendingUp, Shield, Search, Zap, ArrowRight
+  Award, ChevronRight, Brain, Calendar, TrendingUp, Shield, Search, Zap, ArrowRight,
+  Volume2, VolumeX, Sliders, Bell, Globe, Lock, Key, Laptop, Wifi, Compass, Layers, Info, 
+  RotateCcw, Smartphone, Mail, Hash, BookOpen, GraduationCap, MicOff, VideoOff, MessageSquare,
+  HelpCircle, Monitor
 } from 'lucide-react';
 import { auth, db, storage } from '../firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { API_BASE_URL } from '../config/api';
 
 export default function CandidateProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const videoRef = useRef(null);
+  
+  // Listen for redirected unauthorized interview access
+  useEffect(() => {
+    if (location.state?.sessionError) {
+      showPopup(
+        "Direct Entry Blocked",
+        location.state.sessionError,
+        "error",
+        "Understood"
+      );
+      // Clean history state so popup does not re-trigger on subsequent tab switches
+      navigate('/candidate/profile', { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [streamActive, setStreamActive] = useState(false);
@@ -25,8 +44,44 @@ export default function CandidateProfile() {
   
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [formData, setFormData] = useState({
-    fullName: '', phone: '', university: '', degree: '', gradYear: '', linkedin: '', github: '', interviewCode: ''
+    fullName: '', 
+    phone: '', 
+    university: '', 
+    degree: '', 
+    gradYear: '', 
+    gpa: '',
+    targetRole: 'Full-Stack Software Engineer',
+    bio: '',
+    portfolio: '',
+    linkedin: '', 
+    github: '', 
+    interviewCode: '',
+    // AI Recruiter Preferences
+    aiVoiceURI: '',
+    speechRate: '1.0',
+    autoPlayTTS: true,
+    defaultAnswerMode: 'speech', // 'speech' | 'manual'
+    enableCaptions: true,
+    // Hardware & Media preferences
+    cameraResolution: '720p',
+    // Proctoring & Privacy
+    proctoringSensitivity: 'balanced', // 'balanced' | 'high'
+    alertStyle: 'banner', // 'banner' | 'sound' | 'border'
+    lowBandwidthMode: false,
+    shareTelemetry: true,
+    // Notifications & Alerts
+    notifyOnReview: true,
+    soundOnAdmit: true,
+    interviewReminders: true
   });
+
+  // Settings Subtab & Audio Testing States
+  const [settingsSubtab, setSettingsSubtab] = useState('profile'); // 'profile' | 'ai_audio' | 'hardware' | 'proctoring' | 'account'
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [isPlayingVoiceSample, setIsPlayingVoiceSample] = useState(false);
+  const [micVolumeLevel, setMicVolumeLevel] = useState(0);
+  const micAnalyserRef = useRef(null);
+  const micAnimRef = useRef(null);
 
   // Device selection states
   const [videoDevices, setVideoDevices] = useState([]);
@@ -76,7 +131,90 @@ export default function CandidateProfile() {
 
   const showPopup = (title, message, type = 'error', btnText = 'Understood') => {
     setFeedbackPopup({ show: true, title, message, type, btnText });
-  }; 
+  };
+
+  // Live Network Latency (Ping in ms)
+  const [networkPing, setNetworkPing] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const measurePing = async () => {
+      try {
+        const start = performance.now();
+        // Ping local or production backend root health endpoint
+        await fetch(`${API_BASE_URL}/?_t=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          mode: 'cors'
+        });
+        const elapsed = Math.max(1, Math.round(performance.now() - start));
+        if (isMounted) setNetworkPing(elapsed);
+      } catch {
+        try {
+          const start = performance.now();
+          await fetch(`${window.location.origin}/?_t=${Date.now()}`, {
+            method: 'HEAD',
+            cache: 'no-store'
+          });
+          const elapsed = Math.max(1, Math.round(performance.now() - start));
+          if (isMounted) setNetworkPing(elapsed);
+        } catch {
+          const rtt = navigator.connection?.rtt;
+          if (isMounted) setNetworkPing(rtt || 24);
+        }
+      }
+    };
+
+    measurePing();
+    const interval = setInterval(measurePing, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const getPingBadgeStyles = (ping) => {
+    if (ping === null) {
+      return {
+        border: 'border-slate-700/60',
+        dot: 'bg-slate-400',
+        text: 'text-slate-300',
+        icon: 'text-slate-400'
+      };
+    }
+    if (ping <= 60) {
+      return {
+        border: 'border-emerald-500/30',
+        dot: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]',
+        text: 'text-emerald-300',
+        icon: 'text-emerald-400'
+      };
+    }
+    if (ping <= 150) {
+      return {
+        border: 'border-cyan-500/30',
+        dot: 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]',
+        text: 'text-cyan-300',
+        icon: 'text-cyan-400'
+      };
+    }
+    if (ping <= 250) {
+      return {
+        border: 'border-amber-500/30',
+        dot: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]',
+        text: 'text-amber-300',
+        icon: 'text-amber-400'
+      };
+    }
+    return {
+      border: 'border-rose-500/30',
+      dot: 'bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.8)]',
+      text: 'text-rose-300',
+      icon: 'text-rose-400'
+    };
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -130,6 +268,29 @@ export default function CandidateProfile() {
       }
     }
     getDevices();
+  }, []);
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      if (voices.length > 0) {
+        setFormData(prev => {
+          if (!prev.aiVoiceURI) {
+            const preferred = voices.find(v => 
+              v.lang.startsWith('en') && 
+              (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Female'))
+            );
+            return { ...prev, aiVoiceURI: preferred ? preferred.voiceURI : voices[0].voiceURI };
+          }
+          return prev;
+        });
+      }
+    };
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
   const fetchPastInterviews = async (uid) => {
@@ -384,9 +545,35 @@ export default function CandidateProfile() {
         setStreamActive(true);
         setHardwareStatus('passed');
       }
+
+      // Live Microphone volume analyser
+      try {
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+          micAnalyserRef.current = { audioCtx, analyser };
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          const checkVolume = () => {
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+            const avg = sum / dataArray.length;
+            setMicVolumeLevel(Math.min(100, Math.round((avg / 128) * 100)));
+            micAnimRef.current = requestAnimationFrame(checkVolume);
+          };
+          checkVolume();
+        }
+      } catch (e) {
+        console.warn("Audio meter setup notice:", e);
+      }
     } catch (err) {
       setHardwareStatus('failed');
-      alert("Could not access camera/microphone. Please check permissions.");
+      showPopup("Device Access Denied", "Could not access camera or microphone. Please ensure your browser has camera & mic permissions enabled.", "error", "Close");
     }
   };
 
@@ -394,6 +581,63 @@ export default function CandidateProfile() {
     if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       setStreamActive(false);
+    }
+    if (micAnimRef.current) {
+      cancelAnimationFrame(micAnimRef.current);
+    }
+    if (micAnalyserRef.current?.audioCtx) {
+      try { micAnalyserRef.current.audioCtx.close(); } catch(e) {}
+      micAnalyserRef.current = null;
+    }
+    setMicVolumeLevel(0);
+  };
+
+  // Voice Sample Test Player
+  const handleTestVoiceSample = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsPlayingVoiceSample(true);
+      const text = `Hello ${formData.fullName || 'Candidate'}! This is your HireVision AI Recruiter. Your voice settings and audio output are working perfectly.`;
+      const utterance = new SpeechSynthesisUtterance(text);
+      const selected = availableVoices.find(v => v.voiceURI === formData.aiVoiceURI);
+      if (selected) utterance.voice = selected;
+      utterance.rate = parseFloat(formData.speechRate) || 1.0;
+      utterance.onend = () => setIsPlayingVoiceSample(false);
+      utterance.onerror = () => setIsPlayingVoiceSample(false);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Speaker Output Frequency Chime Test
+  const handleTestSpeaker = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.12); // E5
+      osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.24); // G5
+      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.55);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.6);
+      showPopup("Speaker Audio Check", "Harmonic audio chime played successfully! Did you hear the chime from your speakers/headphones?", "success", "Sound Working");
+    } catch (e) {
+      showPopup("Audio Test Error", "Could not play test chime: " + e.message, "error", "Close");
+    }
+  };
+
+  // Password Reset Link Dispatcher
+  const handleSendPasswordReset = async () => {
+    if (!user || !user.email) return;
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      showPopup("Reset Link Dispatched", `A secure password reset link has been dispatched to ${user.email}. Please check your inbox or spam folder.`, "success", "Understood");
+    } catch (e) {
+      showPopup("Reset Failed", e.message, "error", "Close");
     }
   };
 
@@ -517,7 +761,7 @@ export default function CandidateProfile() {
       formData.append("file", file);
       formData.append("user_id", user.uid);
 
-      const res = await fetch("http://localhost:8000/api/store-resume", {
+      const res = await fetch(`${API_BASE_URL}/api/store-resume`, {
         method: "POST",
         body: formData
       });
@@ -577,7 +821,7 @@ export default function CandidateProfile() {
         formDataToSend.append("focusedSkills", JSON.stringify(activeJob.focusedSkills));
       }
 
-      const response = await fetch("http://localhost:8000/api/upload-resume", {
+      const response = await fetch(`${API_BASE_URL}/api/upload-resume`, {
           method: "POST",
           body: formDataToSend
       });
@@ -624,8 +868,20 @@ export default function CandidateProfile() {
           setIsUploading(true); 
           
           stopCamera();
+          
+          // Store active interview recovery ticket in sessionStorage
+          const sessionPayload = {
+            generatedQuestions,
+            jobId: activeJob.jobId,
+            recruiterId: activeJob.recruiterId,
+            jobTitle: activeJob.title,
+            requestId: docRef.id,
+            timestamp: Date.now()
+          };
+          sessionStorage.setItem('hv_active_interview_session', JSON.stringify(sessionPayload));
+
           setTimeout(() => {
-            navigate('/candidate/interview', { state: { generatedQuestions, jobId: activeJob.jobId, recruiterId: activeJob.recruiterId, jobTitle: activeJob.title, requestId: docRef.id } });
+            navigate('/candidate/interview', { state: sessionPayload });
           }, 5000);
         } else if (data && data.status === 'rejected') {
           unsubscribe();
@@ -779,10 +1035,21 @@ export default function CandidateProfile() {
                          <span className="text-[11px] font-semibold text-emerald-300">Microphone Ready</span>
                       </div>
 
-                      <div className="bg-[#151e32] border border-indigo-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
-                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                         <span className="text-[11px] font-semibold text-indigo-300">AI Proctor Active</span>
-                      </div>
+                      {(() => {
+                         const badge = getPingBadgeStyles(networkPing);
+                         return (
+                           <div 
+                             title={networkPing !== null ? `Round-trip network latency: ${networkPing}ms` : 'Measuring network latency...'}
+                             className={`bg-[#151e32] border ${badge.border} px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm transition-all duration-300`}
+                           >
+                             <div className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                             <Wifi size={11} className={badge.icon} />
+                             <span className={`text-[11px] font-semibold ${badge.text}`}>
+                               Network: {networkPing !== null ? `${networkPing} ms` : 'Measuring...'}
+                             </span>
+                           </div>
+                         );
+                       })()}
                    </div>
                 </div>
              </div>
@@ -1780,132 +2047,845 @@ export default function CandidateProfile() {
 
         {/* TAB: SETTINGS */}
         {activeTab === 'settings' && (
-          <div className="max-w-4xl mx-auto space-y-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
-              <p className="text-slate-400">Manage your personal information and hardware setup.</p>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-              
-              {/* Personal Info */}
-              <div className="bg-[#151e32] border border-slate-700 rounded-3xl p-6 shadow-xl h-fit">
-                <div className="flex items-center gap-2 border-b border-slate-700/50 pb-4 mb-6">
-                  <UserCircle size={20} className="text-indigo-400" />
-                  <h2 className="text-lg font-semibold text-white">Personal Information</h2>
+          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-300">
+            
+            {/* Settings Header with Direct Save Action */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Settings & System Setup</h1>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 font-semibold">
+                    v2.4
+                  </span>
                 </div>
-                
-                <form onSubmit={handleSaveProfile} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Full Name</label>
-                      <input type="text" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} required/>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Phone Number</label>
-                      <input type="tel" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}/>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="col-span-2">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">University / College</label>
-                      <input type="text" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})}/>
-                    </div>
-                    <div className="col-span-1">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Degree</label>
-                      <input type="text" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.degree} onChange={e => setFormData({...formData, degree: e.target.value})} placeholder="e.g. B.S."/>
-                    </div>
-                    <div className="col-span-1">
-                      <label className="block text-xs font-medium text-slate-400 mb-1">Grad Year</label>
-                      <input type="text" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.gradYear} onChange={e => setFormData({...formData, gradYear: e.target.value})} placeholder="2024"/>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">LinkedIn Profile</label>
-                      <input type="url" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.linkedin} onChange={e => setFormData({...formData, linkedin: e.target.value})} placeholder="https://..."/>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">GitHub Profile</label>
-                      <input type="url" className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                             value={formData.github} onChange={e => setFormData({...formData, github: e.target.value})} placeholder="https://..."/>
-                    </div>
-                  </div>
-
-                  <div className="pt-4">
-                    <button type="submit" disabled={isSavingProfile} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 rounded-xl transition flex items-center justify-center gap-2">
-                      {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                      {isSavingProfile ? 'Saving...' : 'Save Profile Details'}
-                    </button>
-                  </div>
-                </form>
+                <p className="text-xs sm:text-sm text-slate-400">
+                  Configure your professional profile, AI recruiter parameters, audio/video diagnostics, and proctoring telemetry.
+                </p>
               </div>
 
-              {/* Hardware Test */}
-              <div className="bg-[#151e32] border border-slate-700 rounded-3xl overflow-hidden shadow-xl h-fit">
-                <div className="p-4 border-b border-slate-700/50 flex justify-between items-center">
-                  <h3 className="font-semibold text-white flex items-center gap-2"><Settings size={18} className="text-indigo-400"/> Device Setup</h3>
-                  {hardwareStatus === 'passed' && <span className="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded-lg flex items-center gap-1"><CheckCircle2 size={12}/> Ready</span>}
-                  {hardwareStatus === 'failed' && <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded-lg flex items-center gap-1"><AlertCircle size={12}/> Error</span>}
-                </div>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={isSavingProfile}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-indigo-600/25 active:scale-[0.98] disabled:opacity-60"
+              >
+                {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                <span>{isSavingProfile ? 'Saving...' : 'Save All Changes'}</span>
+              </button>
+            </div>
+
+            {/* Category Navigation Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+              {[
+                { id: 'profile', label: 'Profile & Career Bio', icon: <UserCircle size={16} /> },
+                { id: 'ai_audio', label: 'AI Voice & Speech Engine', icon: <Brain size={16} /> },
+                { id: 'hardware', label: 'Hardware Pre-Flight', icon: <Camera size={16} /> },
+                { id: 'proctoring', label: 'Proctoring & Privacy', icon: <ShieldCheck size={16} /> },
+                { id: 'security', label: 'Security & Alerts', icon: <Bell size={16} /> },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSettingsSubtab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
+                    settingsSubtab === tab.id
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-100'
+                      : 'bg-[#151e32] text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* SUBTAB 1: PROFILE & CAREER BIO */}
+            {settingsSubtab === 'profile' && (
+              <form onSubmit={handleSaveProfile} className="space-y-6">
                 
-                <div className="p-6">
-                  {/* Device Selectors */}
-                  <div className="space-y-4 mb-6">
+                {/* Candidate Identity Overview Card */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl flex flex-col sm:flex-row items-center gap-6">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-600/30 border border-indigo-400/30 shrink-0">
+                    {formData.fullName ? formData.fullName.slice(0, 2).toUpperCase() : 'CV'}
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
+                      <h3 className="text-xl font-bold text-white">{formData.fullName || 'Candidate Profile'}</h3>
+                      <span className="text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 size={12} /> Verified Candidate
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-mono mb-2">{user?.email || 'No email attached'}</p>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 font-medium">
+                      <Briefcase size={13} />
+                      <span>{formData.targetRole || 'Software Engineer'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Personal Information & Bio */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <UserCircle size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Basic Information & Professional Bio</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1"><Camera size={14}/> Camera Input</label>
-                      <select 
-                        className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                        value={selectedVideoDevice}
-                        onChange={(e) => { setSelectedVideoDevice(e.target.value); if(streamActive) { stopCamera(); setStreamActive(false); } }}
-                      >
-                        {videoDevices.map(device => (
-                          <option key={device.deviceId} value={device.deviceId}>{device.label || `Camera ${device.deviceId.slice(0,5)}`}</option>
-                        ))}
-                        {videoDevices.length === 0 && <option value="">No cameras found</option>}
-                      </select>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Full Legal Name *</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.fullName} 
+                        onChange={e => setFormData({...formData, fullName: e.target.value})} 
+                        required 
+                      />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1"><Mic size={14}/> Microphone Input</label>
-                      <select 
-                        className="w-full bg-[#0b1121] border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                        value={selectedAudioDevice}
-                        onChange={(e) => { setSelectedAudioDevice(e.target.value); if(streamActive) { stopCamera(); setStreamActive(false); } }}
-                      >
-                        {audioDevices.map(device => (
-                          <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${device.deviceId.slice(0,5)}`}</option>
-                        ))}
-                        {audioDevices.length === 0 && <option value="">No microphones found</option>}
-                      </select>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Email Address</label>
+                      <input 
+                        type="email" 
+                        disabled
+                        className="w-full bg-[#0b1121]/50 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-400 cursor-not-allowed"
+                        value={user?.email || ''} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Phone Number</label>
+                      <input 
+                        type="tel" 
+                        placeholder="+1 (555) 000-0000"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.phone} 
+                        onChange={e => setFormData({...formData, phone: e.target.value})} 
+                      />
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-center">
-                    <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden mb-6 border border-slate-700 shadow-inner">
-                      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]"></video>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Engineering Role</label>
+                      <select
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition cursor-pointer"
+                        value={formData.targetRole || 'Full-Stack Software Engineer'}
+                        onChange={e => setFormData({...formData, targetRole: e.target.value})}
+                      >
+                        <option value="Full-Stack Software Engineer">Full-Stack Software Engineer</option>
+                        <option value="Frontend Specialist (React/Next)">Frontend Specialist (React / Next.js)</option>
+                        <option value="Backend & Distributed Systems">Backend & Distributed Systems</option>
+                        <option value="AI / Machine Learning Engineer">AI / Machine Learning Engineer</option>
+                        <option value="DevOps & Cloud Infrastructure">DevOps & Cloud Infrastructure</option>
+                        <option value="Mobile Engineer (iOS/Android/Flutter)">Mobile Engineer (Flutter / React Native)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Personal Portfolio / Website</label>
+                      <input 
+                        type="url" 
+                        placeholder="https://yourportfolio.dev"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.portfolio || ''} 
+                        onChange={e => setFormData({...formData, portfolio: e.target.value})} 
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-300">Professional Bio & Elevator Summary</label>
+                      <span className="text-[11px] text-slate-500">Priming context for Groq AI</span>
+                    </div>
+                    <textarea 
+                      rows={3}
+                      placeholder="Briefly describe your core engineering philosophy, years of experience, and signature technical stacks..."
+                      className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl p-3 text-sm text-white focus:outline-none transition leading-relaxed placeholder:text-slate-600"
+                      value={formData.bio || ''} 
+                      onChange={e => setFormData({...formData, bio: e.target.value})} 
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      💡 The Groq LLaMA 3.3 engine utilizes this summary to dynamically personalize technical interview questions.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Academic Credentials */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <GraduationCap size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Academic Qualifications</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">University / College</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Stanford University"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.university} 
+                        onChange={e => setFormData({...formData, university: e.target.value})} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Degree / Major</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. B.Tech / B.S. CS"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.degree} 
+                        onChange={e => setFormData({...formData, degree: e.target.value})} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">Grad Year & GPA</label>
+                      <input 
+                        type="text" 
+                        placeholder="2024 (GPA: 3.8)"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.gradYear} 
+                        onChange={e => setFormData({...formData, gradYear: e.target.value})} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Social Profiles & Developer Hubs */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <Globe size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Online Profiles & Repositories</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-slate-300">LinkedIn URL</label>
+                        {formData.linkedin && (
+                          <a href={formData.linkedin} target="_blank" rel="noreferrer" className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1">
+                            Verify <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
+                      <input 
+                        type="url" 
+                        placeholder="https://linkedin.com/in/username"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.linkedin} 
+                        onChange={e => setFormData({...formData, linkedin: e.target.value})} 
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-slate-300">GitHub Profile URL</label>
+                        {formData.github && (
+                          <a href={formData.github} target="_blank" rel="noreferrer" className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1">
+                            Verify <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
+                      <input 
+                        type="url" 
+                        placeholder="https://github.com/username"
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition"
+                        value={formData.github} 
+                        onChange={e => setFormData({...formData, github: e.target.value})} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button 
+                    type="submit" 
+                    disabled={isSavingProfile}
+                    className="px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center gap-2"
+                  >
+                    {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{isSavingProfile ? 'Saving Details...' : 'Save Profile Information'}</span>
+                  </button>
+                </div>
+
+              </form>
+            )}
+
+            {/* SUBTAB 2: AI VOICE & SPEECH ENGINE */}
+            {settingsSubtab === 'ai_audio' && (
+              <div className="space-y-6">
+                
+                {/* Voice Selection & Speed Card */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-6">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-700/50">
+                    <div className="flex items-center gap-2">
+                      <Brain size={18} className="text-indigo-400" />
+                      <h2 className="text-base font-semibold text-white">AI Recruiter Speech Synthesis</h2>
+                    </div>
+                    <span className="text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-full font-medium">
+                      Neural TTS v2.4
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-2">Default Recruiter Voice</label>
+                      <select
+                        className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none transition cursor-pointer"
+                        value={formData.aiVoiceURI}
+                        onChange={e => setFormData({...formData, aiVoiceURI: e.target.value})}
+                      >
+                        {availableVoices.filter(v => v.lang.startsWith('en')).map(v => (
+                          <option key={v.voiceURI} value={v.voiceURI} className="bg-[#0b1120] text-slate-200">
+                            {v.name.replace('Microsoft ', '').replace(' Desktop', '').replace('English ', '')} ({v.lang})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-slate-500 mt-1.5">
+                        Selected voice will verbalize interview questions inside the proctored studio.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-2">Speech Delivery Rate</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { val: '0.85', label: '0.85x', desc: 'Deliberate' },
+                          { val: '1.0', label: '1.0x', desc: 'Standard' },
+                          { val: '1.15', label: '1.15x', desc: 'Brisk' }
+                        ].map(rate => (
+                          <button
+                            key={rate.val}
+                            type="button"
+                            onClick={() => setFormData({...formData, speechRate: rate.val})}
+                            className={`p-2.5 rounded-xl border text-center transition ${
+                              formData.speechRate === rate.val
+                                ? 'bg-indigo-600 border-indigo-500 text-white font-bold shadow-md shadow-indigo-600/30'
+                                : 'bg-[#0b1121] border-slate-700 text-slate-300 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="text-sm">{rate.label}</div>
+                            <div className="text-[10px] text-slate-400">{rate.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Voice Sample Test */}
+                  <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
+                        <Volume2 size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">Test Speech Synthesis</h4>
+                        <p className="text-xs text-slate-400">Preview the AI voice using your chosen speed & accent.</p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestVoiceSample}
+                      disabled={isPlayingVoiceSample}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition flex items-center justify-center gap-2"
+                    >
+                      {isPlayingVoiceSample ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                      <span>{isPlayingVoiceSample ? 'Playing Sample...' : 'Hear AI Sample'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Transcription & Answering Preferences */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <Sliders size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Answer Studio & Transcription Preferences</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Default Mode Preference */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 space-y-2">
+                      <label className="block text-xs font-semibold text-slate-200">Default Answering Mode</label>
+                      <p className="text-xs text-slate-400 mb-3">Which mode opens when stepping to a new question:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({...formData, defaultAnswerMode: 'speech'})}
+                          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                            formData.defaultAnswerMode === 'speech'
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                              : 'bg-[#151e32] text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          <Mic size={14} />
+                          <span>Voice First (STT)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({...formData, defaultAnswerMode: 'manual'})}
+                          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition ${
+                            formData.defaultAnswerMode === 'manual'
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                              : 'bg-[#151e32] text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          <Edit3 size={14} />
+                          <span>Editor First</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Auto-Play Toggle */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Auto-Play Question TTS</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Automatically speak each question upon advancing.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.autoPlayTTS} 
+                        onChange={e => setFormData({...formData, autoPlayTTS: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Live Captions Toggle */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Live Subtitles & Waveforms</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Render speech-to-text preview bar inside the video monitor.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.enableCaptions} 
+                        onChange={e => setFormData({...formData, enableCaptions: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Grammar Autocorrect */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Neural Grammar Polish</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Filter verbal filler words ('um', 'ah') using Groq LLaMA before submission.</p>
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        Always Active
+                      </span>
+                    </div>
+
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button 
+                    type="button" 
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    className="px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center gap-2"
+                  >
+                    {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>Save Speech Preferences</span>
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* SUBTAB 3: HARDWARE PRE-FLIGHT */}
+            {settingsSubtab === 'hardware' && (
+              <div className="space-y-6">
+                
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* Left Column: Device Selectors & Diagnostic Controls (5 cols) */}
+                  <div className="lg:col-span-5 space-y-5">
+                    
+                    <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-700/50">
+                        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                          <Settings size={16} className="text-indigo-400" />
+                          <span>Input Peripherals</span>
+                        </h3>
+                        {hardwareStatus === 'passed' && (
+                          <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1 font-semibold">
+                            <CheckCircle2 size={12}/> Verified
+                          </span>
+                        )}
+                        {hardwareStatus === 'failed' && (
+                          <span className="bg-rose-500/20 text-rose-400 text-xs px-2.5 py-0.5 rounded-full flex items-center gap-1 font-semibold">
+                            <AlertCircle size={12}/> Failed
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Camera Selector */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                          <Camera size={14} className="text-indigo-400" /> Camera Device
+                        </label>
+                        <select 
+                          className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition cursor-pointer"
+                          value={selectedVideoDevice}
+                          onChange={(e) => { 
+                            setSelectedVideoDevice(e.target.value); 
+                            if (streamActive) { stopCamera(); setStreamActive(false); } 
+                          }}
+                        >
+                          {videoDevices.map(device => (
+                            <option key={device.deviceId} value={device.deviceId}>
+                              {device.label || `Camera ${device.deviceId.slice(0,5)}`}
+                            </option>
+                          ))}
+                          {videoDevices.length === 0 && <option value="">No cameras detected</option>}
+                        </select>
+                      </div>
+
+                      {/* Microphone Selector */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                          <Mic size={14} className="text-emerald-400" /> Microphone Device
+                        </label>
+                        <select 
+                          className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition cursor-pointer"
+                          value={selectedAudioDevice}
+                          onChange={(e) => { 
+                            setSelectedAudioDevice(e.target.value); 
+                            if (streamActive) { stopCamera(); setStreamActive(false); } 
+                          }}
+                        >
+                          {audioDevices.map(device => (
+                            <option key={device.deviceId} value={device.deviceId}>
+                              {device.label || `Microphone ${device.deviceId.slice(0,5)}`}
+                            </option>
+                          ))}
+                          {audioDevices.length === 0 && <option value="">No microphones detected</option>}
+                        </select>
+                      </div>
+
+                      {/* Camera Resolution */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                          <Monitor size={14} className="text-cyan-400" /> Video Resolution
+                        </label>
+                        <select 
+                          className="w-full bg-[#0b1121] border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition cursor-pointer"
+                          value={formData.cameraResolution}
+                          onChange={(e) => setFormData({...formData, cameraResolution: e.target.value})}
+                        >
+                          <option value="720p">720p HD (Balanced - Recommended)</option>
+                          <option value="1080p">1080p FHD (High Fidelity)</option>
+                          <option value="480p">480p SD (Data Saver)</option>
+                        </select>
+                      </div>
+
+                      {/* Speaker Test Action */}
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleTestSpeaker}
+                          className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center justify-center gap-2"
+                        >
+                          <Volume2 size={15} className="text-indigo-400" />
+                          <span>Test Speaker / Output Audio</span>
+                        </button>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* Right Column: Live Testing Viewport & Volume Visualizer (7 cols) */}
+                  <div className="lg:col-span-7 bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
+                    
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-700/50 mb-4">
+                      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <Video size={16} className="text-indigo-400" />
+                        <span>Live Monitor & Microphone Decibel Meter</span>
+                      </h3>
+                      <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full ${
+                        streamActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' : 'text-slate-500'
+                      }`}>
+                        {streamActive ? 'Stream Online' : 'Standby'}
+                      </span>
+                    </div>
+
+                    {/* 16:9 Mirrored Camera Screen */}
+                    <div className="relative w-full aspect-video bg-[#070b14] rounded-2xl overflow-hidden mb-4 border border-slate-800 shadow-inner flex items-center justify-center">
+                      <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        className={`absolute inset-0 w-full h-full object-cover transform scale-x-[-1] transition-opacity ${!streamActive && 'opacity-0'}`}
+                      />
+                      
                       {!streamActive && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500">
-                          <Camera size={32} className="mb-2 opacity-50" />
-                          <p className="text-sm">Camera Off</p>
+                        <div className="flex flex-col items-center justify-center text-slate-500 p-6 text-center">
+                          <Camera size={40} className="mb-2 opacity-30 text-indigo-400" />
+                          <p className="text-sm font-semibold text-slate-300">Camera Feed Idle</p>
+                          <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                            Click 'Start Pre-Flight Test' to verify your webcam video and real-time audio decibels.
+                          </p>
                         </div>
                       )}
                     </div>
-                    <button onClick={streamActive ? stopCamera : startCamera} className={`w-full py-3 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${streamActive ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]'}`}>
-                      {streamActive ? "Stop Test" : "Test Camera & Mic"}
+
+                    {/* Microphone Volume Level Bar */}
+                    <div className="mb-5 p-3.5 bg-[#0b1121] rounded-2xl border border-slate-800">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-slate-400 flex items-center gap-1.5 font-medium">
+                          <Mic size={13} className={streamActive && micVolumeLevel > 5 ? 'text-emerald-400 animate-pulse' : 'text-slate-500'} />
+                          Microphone Input Sensitivity
+                        </span>
+                        <span className="text-slate-300 font-mono font-bold">{micVolumeLevel}%</span>
+                      </div>
+                      
+                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-75 ${
+                            micVolumeLevel > 70 ? 'bg-rose-500' : micVolumeLevel > 30 ? 'bg-emerald-400' : 'bg-indigo-500'
+                          }`}
+                          style={{ width: `${micVolumeLevel}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Test Toggle Action */}
+                    <button 
+                      type="button"
+                      onClick={streamActive ? stopCamera : startCamera} 
+                      className={`w-full py-3.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2 ${
+                        streamActive 
+                          ? 'bg-slate-700 hover:bg-slate-600 text-white' 
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30'
+                      }`}
+                    >
+                      {streamActive ? "Stop Pre-Flight Test" : "Start Pre-Flight Camera & Mic Test"}
                     </button>
+
+                  </div>
+
+                </div>
+
+              </div>
+            )}
+
+            {/* SUBTAB 4: PROCTORING & PRIVACY */}
+            {settingsSubtab === 'proctoring' && (
+              <div className="space-y-6">
+                
+                {/* On-Device Guarantee Card */}
+                <div className="bg-gradient-to-r from-indigo-950/40 to-[#151e32] border border-indigo-500/30 rounded-3xl p-6 shadow-xl flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center shrink-0">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white mb-1">On-Device Edge Neural Proctoring</h3>
+                    <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                      HireVision executes facial verification exclusively inside your browser using TensorFlow.js BlazeFace. 
+                      <strong> Zero raw camera video or audio recordings are uploaded or stored on cloud servers.</strong> Only mathematical landmark telemetry and timestamp flags are logged for recruiter audit integrity.
+                    </p>
                   </div>
                 </div>
-              </div>
 
-            </div>
+                {/* Session Proctoring Configurations */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <Shield size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Examination Integrity Settings</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Proctor Sensitivity */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 space-y-2">
+                      <label className="block text-xs font-semibold text-slate-200">Face Detection Sensitivity</label>
+                      <p className="text-xs text-slate-400 mb-3">Threshold for flagging multiple faces or out-of-frame gaze:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({...formData, proctoringSensitivity: 'balanced'})}
+                          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center transition ${
+                            formData.proctoringSensitivity === 'balanced'
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                              : 'bg-[#151e32] text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          Balanced (Recommended)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({...formData, proctoringSensitivity: 'high'})}
+                          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center transition ${
+                            formData.proctoringSensitivity === 'high'
+                              ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                              : 'bg-[#151e32] text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          High Vigilance
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Low Bandwidth Mode */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Low-Bandwidth Mode</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Optimizes mesh inference intervals to save mobile data or weak Wi-Fi.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.lowBandwidthMode} 
+                        onChange={e => setFormData({...formData, lowBandwidthMode: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+
+                    {/* Out of Frame Alert Style */}
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 md:col-span-2 space-y-2">
+                      <label className="block text-xs font-semibold text-slate-200">In-Session Violation Alert Style</label>
+                      <p className="text-xs text-slate-400 mb-3">How the studio notifies you if your face moves outside the frame:</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'banner', label: 'Full Banner Overlay' },
+                          { id: 'sound', label: 'Audio Warning Chime' },
+                          { id: 'border', label: 'Subtle Frame Pulse' }
+                        ].map(st => (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() => setFormData({...formData, alertStyle: st.id})}
+                            className={`p-2.5 rounded-xl border text-xs font-semibold text-center transition ${
+                              formData.alertStyle === st.id
+                                ? 'bg-indigo-600 text-white border-indigo-500 shadow-md'
+                                : 'bg-[#151e32] text-slate-400 border-slate-700'
+                            }`}
+                          >
+                            {st.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button 
+                    type="button" 
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile}
+                    className="px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center gap-2"
+                  >
+                    {isSavingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>Save Privacy Settings</span>
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* SUBTAB 5: SECURITY & ALERTS */}
+            {settingsSubtab === 'security' && (
+              <div className="space-y-6">
+                
+                {/* Notification Preferences */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <Bell size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Email & In-App Notification Alerts</h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Scorecard Evaluation Alerts</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Receive notification when a recruiter completes the Groq rubric review.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.notifyOnReview} 
+                        onChange={e => setFormData({...formData, notifyOnReview: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Waiting Room Admission Chime</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Play audio alert when recruiter admits you from the live lobby queue.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.soundOnAdmit} 
+                        onChange={e => setFormData({...formData, soundOnAdmit: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+
+                    <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Campaign Interview Reminders</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">Receive reminders before active job PIN expiration windows close.</p>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={formData.interviewReminders} 
+                        onChange={e => setFormData({...formData, interviewReminders: e.target.checked})}
+                        className="w-5 h-5 accent-indigo-600 rounded cursor-pointer" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Authentication & Security Credentials */}
+                <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl space-y-5">
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-700/50">
+                    <Lock size={18} className="text-indigo-400" />
+                    <h2 className="text-base font-semibold text-white">Account Security & Credentials</h2>
+                  </div>
+
+                  <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-semibold text-white">Password Recovery & Reset</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Dispatch a secure password update link to <span className="text-slate-200 font-mono">{user?.email}</span>.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSendPasswordReset}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                    >
+                      <Key size={14} className="text-indigo-400" />
+                      <span>Send Reset Email</span>
+                    </button>
+                  </div>
+
+                  <div className="p-4 bg-[#0b1121] rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-xs font-semibold text-white">Terminate Candidate Session</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">Safely sign out of the HireVision Candidate Portal on this machine.</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition flex items-center justify-center gap-1.5"
+                    >
+                      <LogOut size={14} />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+            )}
+
           </div>
         )}
 

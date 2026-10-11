@@ -6,6 +6,7 @@ import RecruiterDashboard from './pages/RecruiterDashboard';
 import AuthPage from './pages/AuthPage';
 import CandidateProfile from './pages/CandidateProfile';
 import SplashScreen from './pages/SplashScreen';
+import LandingPage from './pages/LandingPage';
 
 
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -39,7 +40,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<AuthPage />} />
         
         {/* Candidate Routes */}

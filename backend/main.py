@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 
 env_path = r'D:\MCA Major Project\HireVision\.env'
 load_dotenv(dotenv_path=env_path)
+# Also load backend/.env if present so credentials work in either location
+backend_env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(backend_env_path):
+    load_dotenv(dotenv_path=backend_env_path)
 
 from backend.nlp.interview_engine import GroqClient, InterviewConfig, build_interview, extract_text
 
@@ -213,6 +217,243 @@ async def evaluate_interview(data: EvaluateRequest):
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
+
+import smtplib
+import email.utils
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pydantic import BaseModel
+from typing import List, Optional
+
+class InviteRequest(BaseModel):
+    jobId: str
+    jobTitle: str
+    candidateEmails: List[str]
+    startTime: Optional[str] = "Flexible"
+    endTime: Optional[str] = "Open"
+    recruiterName: Optional[str] = "Recruiter"
+    customMessage: Optional[str] = ""
+
+def generate_invite_text(job_id: str, job_title: str, start_time: str, end_time: str, recruiter_name: str, custom_message: str):
+    launch_url = f"http://localhost:5173/login?code={job_id}"
+    note_line = f"\nNote from Recruiter:\n\"{custom_message}\"\n" if custom_message and custom_message.strip() else ""
+    return f"""Hello Candidate,
+
+You have been invited by {recruiter_name} to complete your AI-proctored technical interview for the position of {job_title}.
+{note_line}
+Your 6-Digit Access PIN: {job_id}
+
+Interview Details:
+- Position: {job_title}
+- Valid Window Start: {start_time or 'Flexible'}
+- Valid Window End: {end_time or 'Open'}
+
+Direct Interview Link:
+{launch_url}
+
+Pre-Flight System Checklist:
+1. Ensure your webcam and microphone are connected and allowed in browser permissions.
+2. Complete the session in a well-lit and quiet room.
+3. Recommended browser: Google Chrome or Microsoft Edge.
+
+Best regards,
+HireVision Autonomous Technical Interview Platform
+"""
+
+def generate_invite_html(job_id: str, job_title: str, start_time: str, end_time: str, recruiter_name: str, custom_message: str):
+    launch_url = f"http://localhost:5173/login?code={job_id}"
+    year_str = str(time.localtime().tm_year)
+    custom_quote = ""
+    if custom_message and custom_message.strip():
+        custom_quote = f'''<div style="margin: 0 0 24px 0; padding: 14px 18px; background-color: #0b1121; border-left: 4px solid #6366f1; border-radius: 8px; font-size: 13px; color: #cbd5e1; font-style: italic;">
+          "{custom_message.strip()}"
+        </div>'''
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Interview Invitation - HireVision</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b1120; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #cbd5e1;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b1120; padding: 40px 10px;">
+    <tr>
+      <td align="center">
+        <table width="100%" max-width="600" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #151e32; border: 1px solid #334155; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+          <!-- Header Banner -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); padding: 32px 40px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 900; letter-spacing: -0.5px;">HireVision</h1>
+              <p style="margin: 6px 0 0 0; color: #e0e7ff; font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 1.5px;">Autonomous Technical Interview Invitation</p>
+            </td>
+          </tr>
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 36px 40px;">
+              <p style="margin: 0 0 16px 0; font-size: 16px; color: #ffffff; font-weight: 600;">Hello Candidate,</p>
+              <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
+                You have been invited by <strong style="color: #ffffff;">{recruiter_name}</strong> to complete your AI-proctored technical interview for the position of <strong style="color: #818cf8;">{job_title}</strong>.
+              </p>
+              
+              {custom_quote}
+
+              <!-- PIN Access Card -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b1121; border: 1px dashed #6366f1; border-radius: 14px; margin: 20px 0 28px 0; padding: 20px; text-align: center;">
+                <tr>
+                  <td>
+                    <span style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px;">Your 6-Digit Access PIN</span>
+                    <div style="font-family: 'Courier New', Courier, monospace; font-size: 36px; font-weight: 900; color: #818cf8; letter-spacing: 10px; margin: 10px 0 6px 0;">{job_id}</div>
+                    <span style="font-size: 12px; color: #64748b;">Keep this PIN safe. Enter it on the candidate launchpad to enter the waiting room.</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Schedule / Role Details -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #101728; border: 1px solid #1e293b; border-radius: 12px; margin-bottom: 28px; padding: 16px;">
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">Target Position:</td>
+                  <td style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #ffffff; text-align: right;">{job_title}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">Valid Window Start:</td>
+                  <td style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #ffffff; text-align: right;">{start_time or 'Flexible'}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">Valid Window End:</td>
+                  <td style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #ffffff; text-align: right;">{end_time or 'Open'}</td>
+                </tr>
+              </table>
+
+              <!-- Action CTA -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{launch_url}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; padding: 14px 36px; border-radius: 12px; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);">
+                      Launch Interview Studio &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Pre-Flight Checklist -->
+              <div style="background-color: #0b1121; border: 1px solid #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 12px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 12px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px;">Pre-Interview System Checklist</h4>
+                <ul style="margin: 0; padding-left: 20px; font-size: 12px; line-height: 1.8; color: #94a3b8;">
+                  <li>Webcam and microphone connected and allowed in browser permissions.</li>
+                  <li>Well-lit and quiet room (AI proctor monitors biometric posture & gaze).</li>
+                  <li>Recommended browser: Google Chrome or Microsoft Edge.</li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #0e1424; padding: 20px 40px; text-align: center; border-top: 1px solid #1e293b;">
+              <p style="margin: 0; font-size: 11px; color: #64748b;">
+                &copy; {year_str} HireVision Autonomous Interview Platform. All rights reserved.<br>
+                This is an automated interview invitation dispatched from your recruiter.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+@app.post("/api/send-interview-invites")
+async def send_interview_invites(data: InviteRequest):
+    try:
+        raw_emails = data.candidateEmails
+        valid_emails = []
+        for em in raw_emails:
+            clean = em.strip()
+            if clean and re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", clean):
+                valid_emails.append(clean)
+        
+        if not valid_emails:
+            return {"status": "error", "message": "No valid recipient email addresses provided."}
+        
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_pass = os.getenv("SMTP_PASS")
+        if smtp_pass:
+            smtp_pass = smtp_pass.replace(" ", "")
+        smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+        raw_from = (os.getenv("SMTP_FROM") or "").strip().strip('"').strip("'")
+        if raw_from and "<" in raw_from and ">" in raw_from:
+            smtp_from = raw_from
+        elif smtp_user:
+            smtp_from = f"HireVision <{smtp_user}>"
+        else:
+            smtp_from = "HireVision <invites@hirevision.ai>"
+
+        text_content = generate_invite_text(
+            job_id=data.jobId,
+            job_title=data.jobTitle,
+            start_time=data.startTime or "Flexible",
+            end_time=data.endTime or "Open",
+            recruiter_name=data.recruiterName or "Your Recruiter",
+            custom_message=data.customMessage or ""
+        )
+
+        html_content = generate_invite_html(
+            job_id=data.jobId,
+            job_title=data.jobTitle,
+            start_time=data.startTime or "Flexible",
+            end_time=data.endTime or "Open",
+            recruiter_name=data.recruiterName or "Your Recruiter",
+            custom_message=data.customMessage or ""
+        )
+
+        if smtp_user and smtp_pass:
+            sent_count = 0
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                for recipient in valid_emails:
+                    msg = MIMEMultipart("alternative")
+                    msg["Subject"] = f"Interview Invitation: {data.jobTitle} (PIN: {data.jobId})"
+                    msg["From"] = smtp_from
+                    msg["To"] = recipient
+                    msg["Reply-To"] = smtp_user
+                    msg["Date"] = email.utils.formatdate(localtime=True)
+                    msg["Message-ID"] = email.utils.make_msgid(domain=smtp_user.split("@")[-1] if "@" in smtp_user else "gmail.com")
+                    
+                    # 1. Attach plain text first (crucial for inbox deliverability)
+                    msg.attach(MIMEText(text_content, "plain", "utf-8"))
+                    # 2. Attach HTML part second
+                    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+                    server.sendmail(smtp_user, recipient, msg.as_string())
+                    sent_count += 1
+
+            return {
+                "status": "success",
+                "mode": "live",
+                "sentCount": sent_count,
+                "recipients": valid_emails,
+                "message": f"Successfully delivered {sent_count} live email invitation(s)!"
+            }
+        else:
+            # Simulated Dev Mode: Logs delivery to terminal
+            print(f"\n[DEV SIMULATION] Sent Interview Invite for Job '{data.jobTitle}' (PIN: {data.jobId})")
+            print(f"Recipients ({len(valid_emails)}): {', '.join(valid_emails)}")
+            print(f"Notice: Add SMTP_USER and SMTP_PASS in .env to enable live mailbox delivery.\n")
+
+            return {
+                "status": "success",
+                "mode": "simulated",
+                "sentCount": len(valid_emails),
+                "recipients": valid_emails,
+                "message": f"Simulated delivery to {len(valid_emails)} candidate(s). (Add SMTP_USER in .env for live sending)"
+            }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

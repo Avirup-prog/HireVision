@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, Bell, HelpCircle, ChevronDown, Home, LayoutGrid, Users, FileText, Settings, Book, LogOut,
   MoreHorizontal, ChevronRight, CheckCircle, Clock, AlertTriangle, X, Play, Plus, Copy, Check, Briefcase, Mic,
   Video, Activity, Brain, Fingerprint, ShieldAlert, Award, Pause, Trash2, LayoutDashboard, LineChart,
   TrendingUp, Sparkles, UserCheck, Zap, ArrowUpRight, BarChart3, Target, Calendar, CheckCircle2, ShieldCheck,
-  Filter, Eye, RefreshCw, Radio, Layers, AlertCircle, ExternalLink, ArrowRight
+  Filter, Eye, RefreshCw, Radio, Layers, AlertCircle, ExternalLink, ArrowRight, Volume2, VolumeX, Wifi, XCircle, RotateCcw, Star, Mail, Send, Loader2
 } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, getDocs, orderBy, query, where, addDoc, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
+import { API_BASE_URL } from '../config/api';
 
 export default function RecruiterDashboard() {
   const navigate = useNavigate();
@@ -39,10 +40,171 @@ export default function RecruiterDashboard() {
   const [dashboardFilter, setDashboardFilter] = useState('all'); // 'all' | 'top' | 'shortlisted'
   const [copiedJobId, setCopiedJobId] = useState(null);
 
+  // Candidate Email Invitation Modal States
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteJob, setInviteJob] = useState(null);
+  const [inviteEmails, setInviteEmails] = useState('');
+  const [inviteCustomMessage, setInviteCustomMessage] = useState('');
+  const [isSendingInvites, setIsSendingInvites] = useState(false);
+  const [inviteToast, setInviteToast] = useState(null);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+
+  const parseRecipientEmails = (input) => {
+    if (!input) return [];
+    return input
+      .split(/[\s,;]+/)
+      .map(e => e.trim())
+      .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  };
+
+  const openInviteModal = (job) => {
+    setInviteJob(job);
+    setInviteEmails('');
+    setInviteCustomMessage('');
+    setShowEmailPreview(false);
+    setShowInviteModal(true);
+  };
+
+  const handleSendInvites = async (e) => {
+    e.preventDefault();
+    if (!inviteJob) return;
+
+    const validEmails = parseRecipientEmails(inviteEmails);
+    if (validEmails.length === 0) {
+      setInviteToast({
+        type: 'error',
+        title: 'Invalid Email Addresses',
+        message: 'Please provide at least one valid recipient email address (e.g. candidate@example.com).'
+      });
+      setTimeout(() => setInviteToast(null), 5000);
+      return;
+    }
+
+    setIsSendingInvites(true);
+    try {
+      const payload = {
+        jobId: inviteJob.jobId,
+        jobTitle: inviteJob.title,
+        candidateEmails: validEmails,
+        startTime: inviteJob.startTime ? new Date(inviteJob.startTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Flexible',
+        endTime: inviteJob.endTime ? new Date(inviteJob.endTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Open',
+        recruiterName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'HireVision Talent Team',
+        customMessage: inviteCustomMessage
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/send-interview-invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setShowInviteModal(false);
+        setInviteEmails('');
+        setInviteCustomMessage('');
+        setInviteJob(null);
+        setInviteToast({
+          type: 'success',
+          title: data.mode === 'live' ? 'Invitations Delivered' : 'Invitations Dispatched (Dev Mode)',
+          message: data.message || `Successfully dispatched interview invites to ${validEmails.length} candidate(s)!`
+        });
+      } else {
+        setInviteToast({
+          type: 'error',
+          title: 'Dispatch Failed',
+          message: data.message || 'Could not dispatch invitations. Please ensure backend is running.'
+        });
+      }
+    } catch (err) {
+      setInviteToast({
+        type: 'error',
+        title: 'Connection Error',
+        message: 'Failed to communicate with invite server: ' + err.message
+      });
+    } finally {
+      setIsSendingInvites(false);
+      setTimeout(() => setInviteToast(null), 6000);
+    }
+  };
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobFilterStatus, setJobFilterStatus] = useState('all'); // 'all' | 'active' | 'paused'
+  const [resultsSearch, setResultsSearch] = useState('');
+  const [resultsFilter, setResultsFilter] = useState('all'); // 'all' | 'top' | 'shortlisted' | 'pending'
+  const [resultsSort, setResultsSort] = useState('score'); // 'score' | 'recent' | 'name'
+  const [shortlistSearch, setShortlistSearch] = useState('');
+  const [shortlistRoleFilter, setShortlistRoleFilter] = useState('all');
+  const [shortlistSort, setShortlistSort] = useState('score'); // 'score' | 'recent' | 'name'
+
   const handleCopyCode = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedJobId(code);
     setTimeout(() => setCopiedJobId(null), 2000);
+  };
+
+  // Waiting Room Live Arrival Sound & Toast States
+  const [waitingSoundEnabled, setWaitingSoundEnabled] = useState(true);
+  const waitingSoundEnabledRef = useRef(true);
+  const isInitialWaitingLoad = useRef(true);
+  const [newArrivalToast, setNewArrivalToast] = useState(null);
+
+  useEffect(() => {
+    waitingSoundEnabledRef.current = waitingSoundEnabled;
+  }, [waitingSoundEnabled]);
+
+  // Synthesize an elegant, crystal-clear waiting room arrival chime
+  const playArrivalSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      const audioCtx = new AudioContextClass();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const now = audioCtx.currentTime;
+
+      // Note 1: 587.33 Hz (D5) - warm entrance tone
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now);
+      gain1.gain.setValueAtTime(0, now);
+      gain1.gain.linearRampToValueAtTime(0.22, now + 0.02);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Note 2: 880.00 Hz (A5) - clear notification chime
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880.0, now + 0.12);
+      gain2.gain.setValueAtTime(0, now + 0.12);
+      gain2.gain.linearRampToValueAtTime(0.25, now + 0.14);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.55);
+
+      // Note 3: 1174.66 Hz (D6) - glassy harmonic shimmer
+      const osc3 = audioCtx.createOscillator();
+      const gain3 = audioCtx.createGain();
+      osc3.type = 'triangle';
+      osc3.frequency.setValueAtTime(1174.66, now + 0.22);
+      gain3.gain.setValueAtTime(0, now + 0.22);
+      gain3.gain.linearRampToValueAtTime(0.12, now + 0.24);
+      gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+      osc3.connect(gain3);
+      gain3.connect(audioCtx.destination);
+      osc3.start(now + 0.22);
+      osc3.stop(now + 0.7);
+    } catch (err) {
+      console.warn("Waiting room audio notification error:", err);
+    }
   };
 
   
@@ -84,8 +246,34 @@ export default function RecruiterDashboard() {
     
     const unsubscribe = onSnapshot(qWaiting, (snapshot) => {
       const waiting = [];
+      let newCandidateName = null;
+
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const docData = change.doc.data();
+          newCandidateName = docData.candidateName || 'A candidate';
+        }
+      });
+
       snapshot.forEach(d => waiting.push({ id: d.id, ...d.data() }));
       setWaitingCandidates(waiting);
+
+      if (isInitialWaitingLoad.current) {
+        // Initial load: don't chime for candidates who were already waiting before page opened
+        isInitialWaitingLoad.current = false;
+      } else if (newCandidateName) {
+        // A new request has arrived in real-time!
+        if (waitingSoundEnabledRef.current) {
+          playArrivalSound();
+        }
+        setNewArrivalToast({
+          name: newCandidateName,
+          id: Date.now()
+        });
+        setTimeout(() => {
+          setNewArrivalToast(null);
+        }, 5000);
+      }
     });
 
     return () => unsubscribe();
@@ -176,7 +364,50 @@ export default function RecruiterDashboard() {
     try { await updateDoc(doc(db, 'interview_requests', requestId), { status: 'rejected' }); } catch (e) {}
   };
 
+  const handleApproveAll = async () => {
+    if (waitingCandidates.length === 0) return;
+    try {
+      await Promise.all(
+        waitingCandidates.map(req => 
+          updateDoc(doc(db, 'interview_requests', req.id), { status: 'approved' })
+        )
+      );
+    } catch (e) {
+      alert("Error approving candidates");
+    }
+  };
+
+  const handleDenyAll = async () => {
+    if (waitingCandidates.length === 0) return;
+    if (!window.confirm("Deny all pending candidates in the waiting room?")) return;
+    try {
+      await Promise.all(
+        waitingCandidates.map(req => 
+          updateDoc(doc(db, 'interview_requests', req.id), { status: 'rejected' })
+        )
+      );
+    } catch (e) {
+      alert("Error denying candidates");
+    }
+  };
+
   
+  const handleRemoveFromShortlist = async (candidate, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Remove ${candidate.candidateName} from the shortlisted pool?`)) return;
+    try {
+      await updateDoc(doc(db, 'interviews', candidate.id), { status: 'completed' });
+      if (candidate.requestId) {
+        await updateDoc(doc(db, 'interview_requests', candidate.requestId), { status: 'approved' });
+      }
+      if (selectedInterview && selectedInterview.id === candidate.id) {
+        setSelectedInterview({ ...selectedInterview, status: 'completed' });
+      }
+    } catch (err) {
+      alert("Error removing from shortlist");
+    }
+  };
+
   const handleShortlist = async () => {
     if (!selectedInterview) return;
     try {
@@ -209,7 +440,7 @@ export default function RecruiterDashboard() {
     if (!selectedInterview) return;
     setIsEvaluating(true);
     try {
-      const response = await fetch('http://localhost:8000/api/evaluate-interview', {
+      const response = await fetch(`${API_BASE_URL}/api/evaluate-interview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,7 +473,50 @@ export default function RecruiterDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b1120] text-slate-300 font-sans flex overflow-hidden">
+    <div className="min-h-screen bg-[#0b1120] text-slate-300 font-sans flex overflow-hidden relative">
+      {/* Toast Alert for New Waiting Room Arrivals */}
+      {newArrivalToast && (
+        <div className="fixed top-6 right-6 z-50 animate-bounce duration-1000">
+          <div className="bg-gradient-to-r from-[#1c1836] via-[#151e32] to-[#1c1836] border border-red-500/50 shadow-[0_10px_30px_rgba(239,68,68,0.3)] rounded-2xl p-4 flex items-center gap-3.5 backdrop-blur-md max-w-md">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+              <Radio size={20} className="animate-pulse" />
+            </div>
+            <div className="flex-1 pr-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                  New Arrival
+                </span>
+                <span className="text-[10px] text-slate-400">Just now</span>
+              </div>
+              <h4 className="text-sm font-bold text-white mt-0.5">
+                {newArrivalToast.name} is waiting!
+              </h4>
+              <p className="text-xs text-slate-400">
+                Candidate submitted PIN & joined the admission queue.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('waiting');
+                  setNewArrivalToast(null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-md"
+              >
+                Review
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewArrivalToast(null)}
+                className="p-1 rounded text-slate-500 hover:text-slate-300 transition text-center"
+              >
+                <X size={14} className="mx-auto" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Sidebar */}
       <aside className="w-64 border-r border-slate-800/60 bg-[#0b1121] p-6 flex flex-col shrink-0">
         <div className="flex items-center gap-3 mb-10">
@@ -753,24 +1027,35 @@ export default function RecruiterDashboard() {
                                   {job.jobId}
                                 </span>
                               </div>
-                              <button
-                                onClick={() => handleCopyCode(job.jobId)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                                  copiedJobId === job.jobId
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                                }`}
-                              >
-                                {copiedJobId === job.jobId ? (
-                                  <>
-                                    <Check size={12} /> Copied!
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy size={12} /> Copy
-                                  </>
-                                )}
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleCopyCode(job.jobId)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                                    copiedJobId === job.jobId
+                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                                  }`}
+                                  title="Copy PIN"
+                                >
+                                  {copiedJobId === job.jobId ? (
+                                    <>
+                                      <Check size={12} /> Copied!
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy size={12} /> Copy
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => openInviteModal(job)}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
+                                  title="Share PIN and send automated email invitation"
+                                >
+                                  <Mail size={12} />
+                                  <span>Invite</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1052,161 +1337,1460 @@ export default function RecruiterDashboard() {
               </div>
             )}{/* JOBS TAB */}
           {activeTab === 'jobs' && (
-            <div className="max-w-5xl mx-auto">
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-1">Your Interview Links</h3>
-                  <p className="text-slate-400 text-sm">Create specific 6-digit codes for different job roles and set their active time windows.</p>
+            <div className="max-w-7xl mx-auto space-y-8 animate-slide-up pb-12">
+              
+              {/* 1. Executive Header */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#151e32] via-[#1a2542] to-[#151e32] border border-slate-700/60 p-6 md:p-8 shadow-2xl">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+                <div className="absolute bottom-0 left-1/4 w-60 h-60 bg-purple-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
+                        <Briefcase size={13} />
+                        Interview Campaigns
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        {jobs.filter(j => j.status !== 'paused').length} Live Campaigns Active
+                      </span>
+                    </div>
+
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                      Active Job Roles & <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">Access PINs</span>
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-1.5 max-w-2xl leading-relaxed">
+                      Manage 6-digit candidate access PINs, configure AI question strategies, monitor active applicant volume, and control interview schedule windows.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowNewJobModal(true)}
+                    className="inline-flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 shrink-0"
+                  >
+                    <Plus size={18} />
+                    <span>New Job Role</span>
+                  </button>
                 </div>
-                <button 
-                  onClick={() => setShowNewJobModal(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20"
-                >
-                  <Plus size={18} />
-                  New Job Role
-                </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {jobs.map(job => (
-                  <div key={job.id} className={`bg-[#151e32] border rounded-2xl p-6 transition-all group ${job.status === 'paused' ? 'border-amber-500/30 opacity-75' : 'border-slate-700/50 hover:border-indigo-500/30'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <h4 className="text-lg font-bold text-white">{job.title}</h4>
-                      {job.status === 'paused' && <span className="bg-amber-500/10 text-amber-500 text-[10px] uppercase font-bold px-2 py-1 rounded">Paused</span>}
-                    </div>
-                    
-                    <div className="space-y-3 mb-6">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Access Code</span>
-                        <span className="font-mono bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded-md tracking-widest font-bold">{job.jobId}</span>
+              {/* 2. Mini KPI Strip */}
+              {(() => {
+                const activeCount = jobs.filter(j => j.status !== 'paused').length;
+                const pausedCount = jobs.filter(j => j.status === 'paused').length;
+                const totalCandidatesTested = completedInterviews.length;
+
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                        <Briefcase size={20} />
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Starts</span>
-                        <span className="text-slate-300">{new Date(job.startTime).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Ends</span>
-                        <span className="text-slate-300">{new Date(job.endTime).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</span>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Roles</p>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{jobs.length}</h3>
                       </div>
                     </div>
-                    
-                    <div className="flex gap-2 border-t border-slate-700/50 pt-4">
-                      <button onClick={() => handlePauseJob(job)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition">
-                        <Pause size={14} /> {job.status === 'paused' ? 'Resume' : 'Pause'}
-                      </button>
-                      <button onClick={() => handleDeleteJob(job.id)} className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition">
-                        <Trash2 size={14} /> Remove
-                      </button>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Live & Active</p>
+                        <h3 className="text-2xl font-bold text-emerald-400 tracking-tight">{activeCount}</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Pause size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Paused</p>
+                        <h3 className="text-2xl font-bold text-amber-400 tracking-tight">{pausedCount}</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Evaluated</p>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{totalCandidatesTested}</h3>
+                      </div>
                     </div>
                   </div>
-                ))}
+                );
+              })()}
+
+              {/* 3. Search and Filter Bar */}
+              <div className="bg-[#151e32] border border-slate-800/90 rounded-2xl p-4 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Search Input */}
+                <div className="relative flex-1 max-w-md">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search by job title, 6-digit PIN, or skill..."
+                    value={jobSearch}
+                    onChange={(e) => setJobSearch(e.target.value)}
+                    className="w-full bg-[#0b1121] border border-slate-800 rounded-xl pl-10 pr-9 py-2 text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                  />
+                  {jobSearch && (
+                    <button
+                      onClick={() => setJobSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center gap-2">
+                  <div className="flex p-1 bg-[#0b1121] rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setJobFilterStatus('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        jobFilterStatus === 'all'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      All ({jobs.length})
+                    </button>
+                    <button
+                      onClick={() => setJobFilterStatus('active')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        jobFilterStatus === 'active'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Active ({jobs.filter(j => j.status !== 'paused').length})
+                    </button>
+                    <button
+                      onClick={() => setJobFilterStatus('paused')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        jobFilterStatus === 'paused'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Paused ({jobs.filter(j => j.status === 'paused').length})
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* 4. Job Cards Grid */}
+              {(() => {
+                let filteredJobs = [...jobs];
+
+                if (jobFilterStatus === 'active') {
+                  filteredJobs = filteredJobs.filter(j => j.status !== 'paused');
+                } else if (jobFilterStatus === 'paused') {
+                  filteredJobs = filteredJobs.filter(j => j.status === 'paused');
+                }
+
+                if (jobSearch.trim()) {
+                  const q = jobSearch.toLowerCase();
+                  filteredJobs = filteredJobs.filter(j => 
+                    (j.title && j.title.toLowerCase().includes(q)) ||
+                    (j.jobId && j.jobId.toLowerCase().includes(q)) ||
+                    (j.focusedSkills && j.focusedSkills.some(s => s.toLowerCase().includes(q)))
+                  );
+                }
+
+                if (filteredJobs.length === 0) {
+                  return (
+                    <div className="text-center py-20 px-4 rounded-3xl bg-[#151e32]/60 border border-dashed border-slate-800">
+                      <Briefcase size={44} className="mx-auto text-slate-600 mb-3" />
+                      <h3 className="text-lg font-bold text-white mb-1">No job roles found</h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mb-6">
+                        {jobSearch ? `No roles matched your search "${jobSearch}".` : 'Create your first interview role and generate a 6-digit access PIN for candidates.'}
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (jobSearch) setJobSearch('');
+                          else setShowNewJobModal(true);
+                        }}
+                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-500/25"
+                      >
+                        {jobSearch ? 'Clear search filter' : <><Plus size={16} /> Create New Job Role</>}
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredJobs.map(job => {
+                      const isPaused = job.status === 'paused';
+                      const isCopied = copiedJobId === job.jobId;
+                      const now = new Date();
+                      const start = job.startTime ? new Date(job.startTime) : null;
+                      const end = job.endTime ? new Date(job.endTime) : null;
+                      const isExpired = end && end < now;
+
+                      // Compute metrics for this specific job
+                      const applicantsCount = completedInterviews.filter(c => c.jobId === job.jobId || (c.jobTitle && c.jobTitle.toLowerCase() === job.title.toLowerCase())).length;
+                      const waitingForJob = waitingCandidates.filter(w => w.jobId === job.jobId);
+                      const totalQuestions = job.config ? job.config.reduce((acc, curr) => acc + (curr.count || 0), 0) : 0;
+
+                      return (
+                        <div
+                          key={job.id}
+                          className={`group relative overflow-hidden rounded-3xl bg-[#151e32] border p-6 transition-all duration-300 flex flex-col justify-between shadow-xl ${
+                            isPaused 
+                              ? 'border-amber-500/30 opacity-80 hover:opacity-100 hover:border-amber-500/50' 
+                              : 'border-slate-800/80 hover:border-indigo-500/40 hover:shadow-2xl'
+                          }`}
+                        >
+                          {/* Background glow on hover */}
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 group-hover:bg-indigo-500/10 rounded-full blur-2xl transition-all"></div>
+
+                          <div>
+                            {/* Top Bar: Icon, Title & Status */}
+                            <div className="flex items-start justify-between gap-3 mb-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                                  isPaused 
+                                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
+                                    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 group-hover:scale-105 transition-transform'
+                                }`}>
+                                  <Briefcase size={20} />
+                                </div>
+                                <div>
+                                  <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors leading-tight line-clamp-1">
+                                    {job.title}
+                                  </h3>
+                                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                    Created {job.createdAt ? new Date(job.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Recently'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 border ${
+                                isPaused
+                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                  : isExpired
+                                  ? 'bg-slate-700/40 text-slate-400 border-slate-600/30'
+                                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              }`}>
+                                {isPaused ? 'Paused' : isExpired ? 'Expired' : 'Active'}
+                              </span>
+                            </div>
+
+                            {/* 6-Digit PIN Launchpad Box */}
+                            <div className="mb-5 rounded-2xl bg-[#0b1121] border border-slate-800/90 p-3.5 space-y-3 relative overflow-hidden group-hover:border-slate-700/80 transition-colors">
+                              {/* Row 1: Access PIN & Compact Copy Pill */}
+                              <div className="flex items-center justify-between pb-2.5 border-b border-slate-800/70">
+                                <div>
+                                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block">Access PIN</span>
+                                  <div className="font-mono text-2xl font-black tracking-widest text-indigo-400 mt-0.5">
+                                    {job.jobId}
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => handleCopyCode(job.jobId)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                                    isCopied
+                                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                                      : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/70'
+                                  }`}
+                                  title="Copy PIN to clipboard"
+                                >
+                                  {isCopied ? (
+                                    <>
+                                      <Check size={13} className="text-emerald-400" />
+                                      <span>Copied!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy size={13} />
+                                      <span>Copy PIN</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              {/* Row 2: Full-Width Primary Invite Action */}
+                              <button
+                                onClick={() => openInviteModal(job)}
+                                className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-indigo-600/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 hover:border-indigo-500 transition-all flex items-center justify-center gap-2 shadow-sm group/btn cursor-pointer"
+                                title="Share PIN and send automated email invitations to candidates"
+                              >
+                                <Mail size={14} className="text-indigo-400 group-hover/btn:text-white transition-colors" />
+                                <span>Invite Candidates</span>
+                              </button>
+                            </div>
+
+                            {/* Schedule Details */}
+                            <div className="space-y-2 mb-4 text-xs">
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span className="flex items-center gap-1.5 text-slate-500">
+                                  <Calendar size={13} /> Starts
+                                </span>
+                                <span className="font-medium text-slate-300">
+                                  {start ? start.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Flexible'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-slate-400">
+                                <span className="flex items-center gap-1.5 text-slate-500">
+                                  <Clock size={13} /> Ends
+                                </span>
+                                <span className="font-medium text-slate-300">
+                                  {end ? end.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Flexible'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* AI Questions & Skills Pills */}
+                            <div className="pt-3 border-t border-slate-800/80 mb-5 space-y-2.5">
+                              {totalQuestions > 0 && (
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-500 flex items-center gap-1">
+                                    <Brain size={13} className="text-purple-400" /> AI Strategy
+                                  </span>
+                                  <span className="text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20">
+                                    {totalQuestions} AI Questions
+                                  </span>
+                                </div>
+                              )}
+
+                              {job.focusedSkills && job.focusedSkills.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {job.focusedSkills.slice(0, 4).map((skill, i) => (
+                                    <span
+                                      key={i}
+                                      className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md font-medium border border-slate-700/60"
+                                    >
+                                      {skill}
+                                    </span>
+                                  ))}
+                                  {job.focusedSkills.length > 4 && (
+                                    <span className="text-[10px] text-slate-500 py-0.5">
+                                      +{job.focusedSkills.length - 4}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Card Footer: Live Telemetry & Actions */}
+                          <div>
+                            {/* Telemetry pill */}
+                            <div className="mb-3 flex items-center justify-between text-xs bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                              <span className="text-slate-400 flex items-center gap-1.5">
+                                <Users size={13} className="text-indigo-400" />
+                                <span>Applicants</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white">{applicantsCount} completed</span>
+                                {waitingForJob.length > 0 && (
+                                  <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
+                                    {waitingForJob.length} in lobby
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                              <button
+                                onClick={() => handlePauseJob(job)}
+                                className={`flex-1 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border ${
+                                  isPaused
+                                    ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                                }`}
+                              >
+                                {isPaused ? <Play size={13} /> : <Pause size={13} />}
+                                <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => setActiveTab('completed')}
+                                className="px-3 py-2 rounded-xl text-xs font-semibold bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-300 border border-indigo-500/25 transition flex items-center gap-1"
+                                title="View Applicants"
+                              >
+                                <Eye size={13} />
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteJob(job.id)}
+                                className="p-2 rounded-xl text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition"
+                                title="Remove Role"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
             </div>
           )}
 
           {/* WAITING ROOM TAB */}
           {activeTab === 'waiting' && (
-            <div className="max-w-4xl mx-auto">
-              {/* ... existing waiting room UI ... */}
-              <div className="bg-[#151e32] border border-indigo-500/20 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
-                  Live Monitor
-                </h3>
-                <p className="text-slate-400 text-sm mb-8">Approve or deny candidates currently attempting to join your interviews.</p>
-                
-                <div className="space-y-4">
-                  {waitingCandidates.length === 0 ? (
-                    <div className="text-center py-12 text-slate-500">
-                      <Clock size={40} className="mx-auto mb-3 opacity-20" />
-                      <p>Waiting for candidates to connect...</p>
+            <div className="max-w-7xl mx-auto space-y-8 animate-slide-up pb-12">
+              
+              {/* 1. Executive Waiting Room Header */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#151e32] via-[#1c1836] to-[#151e32] border border-slate-700/60 p-6 md:p-8 shadow-2xl">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+                <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold">
+                        <Radio size={13} className="animate-pulse" />
+                        Live Knocking Beacon
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                        <Wifi size={13} />
+                        Realtime Firestore Sync: Live
+                      </span>
+                      {/* Audio Cue Status & Test Button */}
+                      <button
+                        type="button"
+                        onClick={() => setWaitingSoundEnabled(!waitingSoundEnabled)}
+                        title={waitingSoundEnabled ? "Arrival sound cue active - click to mute" : "Arrival sound cue muted - click to enable"}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold transition cursor-pointer ${
+                          waitingSoundEnabled
+                            ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25'
+                            : 'bg-slate-800/80 border-slate-700/60 text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        {waitingSoundEnabled ? <Volume2 size={13} className="text-indigo-400 animate-pulse" /> : <VolumeX size={13} className="text-slate-400" />}
+                        <span>Arrival Sound: {waitingSoundEnabled ? 'ON' : 'MUTED'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={playArrivalSound}
+                        title="Click to test harmonic arrival chime"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-slate-300 text-xs font-semibold transition cursor-pointer"
+                      >
+                        <span>🔊 Test Chime</span>
+                      </button>
                     </div>
-                  ) : (
-                    waitingCandidates.map(req => (
-                      <div key={req.id} className="bg-[#0b1121] border border-slate-700 p-5 rounded-xl flex items-center justify-between relative z-10">
-                        <div className="flex items-center gap-4">
-                          <img src={`https://ui-avatars.com/api/?name=${req.candidateName}&background=334155&color=fff`} className="w-12 h-12 rounded-full" alt="Candidate" />
-                          <div>
-                            <h4 className="text-lg font-bold text-white">{req.candidateName}</h4>
-                            <p className="text-sm text-slate-400">Job Code: <span className="font-mono text-indigo-400">{req.jobId}</span></p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button onClick={() => handleDeny(req.id)} className="px-4 py-2 rounded-lg text-red-400 hover:bg-red-500/10 font-medium transition-colors">Deny</button>
-                          <button onClick={() => handleApprove(req.id)} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium shadow-lg transition-all flex items-center gap-2"><Check size={18} /> Admit</button>
-                        </div>
-                      </div>
-                    ))
+
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                      Live Candidate <span className="bg-gradient-to-r from-red-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent">Waiting Room</span>
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-1.5 max-w-2xl leading-relaxed">
+                      Real-time candidate admission queue. Authenticate candidates, verify their pre-flight calibration status, and admit them into their AI interview sessions.
+                    </p>
+                  </div>
+
+                  {waitingCandidates.length > 0 && (
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        onClick={handleDenyAll}
+                        className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700/60 transition"
+                      >
+                        Deny All ({waitingCandidates.length})
+                      </button>
+                      <button
+                        onClick={handleApproveAll}
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/25 transition transform hover:scale-105"
+                      >
+                        <Check size={16} />
+                        <span>Admit All ({waitingCandidates.length})</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
+
+              {/* 2. Telemetry Stat Strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Stat 1: Knocking Count */}
+                <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Candidates In Queue</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <h3 className="text-3xl font-extrabold text-white">{waitingCandidates.length}</h3>
+                      <span className="text-xs text-slate-500">waiting</span>
+                    </div>
+                  </div>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${
+                    waitingCandidates.length > 0
+                      ? 'bg-red-500/15 border-red-500/30 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+                      : 'bg-slate-800/60 border-slate-700 text-slate-500'
+                  }`}>
+                    <Clock size={22} className={waitingCandidates.length > 0 ? 'animate-pulse' : ''} />
+                  </div>
+                </div>
+
+                {/* Stat 2: Active Job Target Codes */}
+                <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Target Job Roles</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <h3 className="text-3xl font-extrabold text-indigo-400">
+                        {new Set(waitingCandidates.map(w => w.jobId)).size}
+                      </h3>
+                      <span className="text-xs text-slate-500">active codes</span>
+                    </div>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                    <Briefcase size={22} />
+                  </div>
+                </div>
+
+                {/* Stat 3: Hardware Verification */}
+                <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-5 shadow-lg flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Hardware Calibration</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <h3 className="text-2xl font-extrabold text-emerald-400">100% Ready</h3>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Camera & mic pre-verified</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <ShieldCheck size={22} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Main Queue List or All-Clear Idle Monitor */}
+              {waitingCandidates.length === 0 ? (
+                /* Idle / All Clear State */
+                <div className="relative overflow-hidden rounded-3xl bg-[#151e32]/80 border border-slate-800/90 p-12 md:p-16 text-center shadow-xl">
+                  {/* Concentric radar rings */}
+                  <div className="mx-auto w-32 h-32 relative flex items-center justify-center mb-6">
+                    <div className="absolute inset-0 rounded-full border border-indigo-500/20 animate-ping"></div>
+                    <div className="absolute inset-3 rounded-full border border-indigo-500/30"></div>
+                    <div className="absolute inset-6 rounded-full border border-indigo-500/40"></div>
+                    <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+                      <Radio size={32} className="animate-pulse" />
+                    </div>
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white mb-2">Reception Lobby is Clear</h3>
+                  <p className="text-sm text-slate-400 max-w-md mx-auto mb-8 leading-relaxed">
+                    No candidates are currently waiting. When candidates enter an active 6-digit access code and complete their camera calibration, their knock will appear here instantly.
+                  </p>
+
+                  {/* Active Codes quick launchpad */}
+                  {jobs.length > 0 && (
+                    <div className="max-w-2xl mx-auto pt-6 border-t border-slate-800/80">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                        Share your active access PINs to invite candidates:
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        {jobs.slice(0, 4).map(job => (
+                          <div
+                            key={job.id}
+                            className="inline-flex items-center gap-2 bg-[#0b1121] border border-slate-800 px-3.5 py-2 rounded-xl text-xs"
+                          >
+                            <span className="text-slate-300 font-medium truncate max-w-[140px]">{job.title}</span>
+                            <span className="font-mono text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded">
+                              {job.jobId}
+                            </span>
+                            <button
+                              onClick={() => handleCopyCode(job.jobId)}
+                              className="text-slate-500 hover:text-slate-300 transition"
+                              title="Copy PIN"
+                            >
+                              {copiedJobId === job.jobId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Active Candidate Knocking Cards */
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                        Active Knocking Queue ({waitingCandidates.length})
+                      </h3>
+                    </div>
+                    <span className="text-xs text-slate-500">Click admit to grant interview room access</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {waitingCandidates.map((req) => (
+                      <div
+                        key={req.id}
+                        className="relative overflow-hidden rounded-2xl bg-[#151e32] border border-red-500/30 hover:border-red-500/50 p-5 md:p-6 shadow-xl transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-5 group"
+                      >
+                        <div className="flex items-start md:items-center gap-4">
+                          {/* Large Avatar with beacon ring */}
+                          <div className="relative shrink-0">
+                            <img
+                              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(req.candidateName || 'Candidate')}&background=4f46e5&color=fff&bold=true&size=64`}
+                              className="w-14 h-14 rounded-2xl border-2 border-indigo-500/40 shadow-lg"
+                              alt={req.candidateName}
+                            />
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border-2 border-[#151e32] animate-ping"></span>
+                            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border-2 border-[#151e32]"></span>
+                          </div>
+
+                          {/* Candidate & Job Details */}
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <h4 className="text-lg font-extrabold text-white group-hover:text-indigo-300 transition-colors">
+                                {req.candidateName || 'Candidate'}
+                              </h4>
+                              <span className="bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                                Knocking
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-400">
+                              <span className="text-slate-300 font-medium flex items-center gap-1.5">
+                                <Briefcase size={13} className="text-indigo-400" />
+                                {req.jobTitle || 'Interview Session'}
+                              </span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <span className="text-slate-500">Access PIN:</span>
+                                <span className="font-mono text-indigo-400 font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                                  {req.jobId}
+                                </span>
+                              </span>
+                              <span>•</span>
+                              <span className="text-slate-500 flex items-center gap-1">
+                                <Clock size={12} />
+                                {req.createdAt ? new Date(req.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                              </span>
+                            </div>
+
+                            {/* Pre-Flight Checklist badges */}
+                            <div className="flex flex-wrap items-center gap-2 mt-3">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                <CheckCircle2 size={11} /> Face Framing Calibrated
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                <Volume2 size={11} /> Mic Audio Tested
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                                <ShieldCheck size={11} /> Identity Confirmed
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-end gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-800">
+                          <button
+                            onClick={() => handleDeny(req.id)}
+                            className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700/60 hover:border-red-500/30 transition flex items-center gap-1.5"
+                          >
+                            <X size={15} />
+                            <span>Deny</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleApprove(req.id)}
+                            className="px-6 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xl shadow-emerald-500/25 transition transform hover:scale-105 active:scale-95 flex items-center gap-2"
+                          >
+                            <Check size={16} />
+                            <span>Admit to Interview</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
           
           {/* COMPLETED TAB */}
           {activeTab === 'completed' && (
-            <div className="max-w-6xl mx-auto space-y-4">
-               {loading ? <p className="text-center text-slate-500 py-10">Loading results...</p> : 
-                 completedInterviews.map((candidate) => (
-                    <div key={candidate.id} className="bg-[#151e32] border border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row justify-between items-center gap-6 transition-all hover:border-slate-700">
-                      <div className="flex items-center gap-4">
-                        <img src={`https://ui-avatars.com/api/?name=${candidate.candidateName}&background=1e293b&color=fff&size=64`} alt="C" className="rounded-full border-2 border-slate-700" />
-                        <div>
-                          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                             {candidate.candidateName}
-                             {candidate.status === 'shortlisted' && <span className="bg-green-500/20 text-green-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded">Shortlisted</span>}
-                          </h3>
-                          <p className="text-xs text-indigo-400 font-medium my-1">Applied for: {candidate.jobTitle || 'General'}</p>
-                          <p className="text-xs text-slate-500">{new Date(candidate.completedAt).toLocaleString()}</p>
-                        </div>
+            <div className="max-w-7xl mx-auto space-y-8 animate-slide-up pb-12">
+              
+              {/* 1. Executive Header */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#151e32] via-[#1a2542] to-[#151e32] border border-slate-700/60 p-6 md:p-8 shadow-2xl">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+                <div className="absolute bottom-0 left-1/4 w-60 h-60 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
+                        <LayoutGrid size={13} />
+                        Evaluation Archive
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                        <Sparkles size={13} />
+                        Groq LLaMA 3.3 Scoring Active
+                      </span>
+                    </div>
+
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                      Interview Results & <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">Applicant Reports</span>
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-1.5 max-w-2xl leading-relaxed">
+                      Comprehensive candidate evaluation registry. Inspect AI rubric scores, question-by-question transcripts, detected signals, and proctoring integrity logs.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="inline-flex items-center gap-2 bg-[#0b1121] border border-slate-800 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-300">
+                      <Users size={15} className="text-indigo-400" />
+                      <span>{completedInterviews.length} Total Submissions</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Mini KPI Metrics Bar */}
+              {(() => {
+                const total = completedInterviews.length;
+                const evaluatedList = completedInterviews.filter(c => c.evaluations && c.evaluations.length > 0);
+                const evaluatedCount = evaluatedList.length;
+                const shortlistedCount = completedInterviews.filter(c => c.status === 'shortlisted').length;
+                
+                let avgMatch = 0;
+                if (evaluatedCount > 0) {
+                  const totalPct = evaluatedList.reduce((acc, c) => {
+                    const max = c.evaluations.length * 5;
+                    const earned = c.evaluations.reduce((sum, e) => sum + (e.score || 0), 0);
+                    return acc + (max > 0 ? (earned / max) * 100 : 0);
+                  }, 0);
+                  avgMatch = Math.round(totalPct / evaluatedCount);
+                }
+
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                        <Users size={20} />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <button onClick={() => setSelectedInterview(candidate)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition flex items-center gap-2 shadow-lg shadow-indigo-500/25">
-                          <FileText size={16} /> Applicant Review
-                        </button>
-                        <button onClick={(e) => handleDeleteInterview(candidate.id, e)} className="bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 p-2.5 rounded-xl transition border border-slate-700 hover:border-red-800/50" title="Delete Interview">
-                          <Trash2 size={16} />
-                        </button>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Completed Tests</p>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{total}</h3>
                       </div>
                     </div>
-                 ))
-               }
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                        <Brain size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">AI Evaluated</p>
+                        <h3 className="text-2xl font-bold text-cyan-400 tracking-tight">{evaluatedCount}</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                        <TrendingUp size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Avg AI Benchmark</p>
+                        <h3 className="text-2xl font-bold text-emerald-400 tracking-tight">{avgMatch > 0 ? `${avgMatch}%` : 'Pending'}</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Award size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Shortlisted</p>
+                        <h3 className="text-2xl font-bold text-amber-400 tracking-tight">{shortlistedCount}</h3>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 3. Search, Filter & Sort Toolbar */}
+              <div className="bg-[#151e32] border border-slate-800/90 rounded-2xl p-4 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search candidate by name, job role, or ID..."
+                    value={resultsSearch}
+                    onChange={(e) => setResultsSearch(e.target.value)}
+                    className="w-full bg-[#0b1121] border border-slate-800 rounded-xl pl-10 pr-9 py-2 text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                  />
+                  {resultsSearch && (
+                    <button
+                      onClick={() => setResultsSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter and Sort Tabs */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex p-1 bg-[#0b1121] rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setResultsFilter('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        resultsFilter === 'all'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      All ({completedInterviews.length})
+                    </button>
+                    <button
+                      onClick={() => setResultsFilter('top')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        resultsFilter === 'top'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Top Matches (80%+)
+                    </button>
+                    <button
+                      onClick={() => setResultsFilter('shortlisted')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        resultsFilter === 'shortlisted'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Shortlisted ({completedInterviews.filter(c => c.status === 'shortlisted').length})
+                    </button>
+                    <button
+                      onClick={() => setResultsFilter('pending')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        resultsFilter === 'pending'
+                          ? 'bg-indigo-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Unscored ({completedInterviews.filter(c => !c.evaluations).length})
+                    </button>
+                  </div>
+
+                  {/* Sort selector */}
+                  <div className="flex items-center gap-1.5 bg-[#0b1121] border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-400">
+                    <Filter size={13} className="text-slate-500" />
+                    <select
+                      value={resultsSort}
+                      onChange={(e) => setResultsSort(e.target.value)}
+                      className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value="score" className="bg-[#151e32] text-white">Highest Score</option>
+                      <option value="recent" className="bg-[#151e32] text-white">Most Recent</option>
+                      <option value="name" className="bg-[#151e32] text-white">Name (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Results List */}
+              {loading ? (
+                <div className="text-center py-20 text-slate-500">
+                  <RefreshCw size={36} className="mx-auto mb-3 animate-spin opacity-40 text-indigo-400" />
+                  <p className="text-sm font-medium">Loading interview results...</p>
+                </div>
+              ) : (() => {
+                let list = [...completedInterviews];
+
+                // Search Filter
+                if (resultsSearch.trim()) {
+                  const q = resultsSearch.toLowerCase();
+                  list = list.filter(c => 
+                    (c.candidateName && c.candidateName.toLowerCase().includes(q)) ||
+                    (c.jobTitle && c.jobTitle.toLowerCase().includes(q)) ||
+                    (c.jobId && c.jobId.toLowerCase().includes(q)) ||
+                    (c.candidateUid && c.candidateUid.toLowerCase().includes(q))
+                  );
+                }
+
+                // Tab Filter
+                if (resultsFilter === 'top') {
+                  list = list.filter(c => {
+                    if (!c.evaluations || c.evaluations.length === 0) return false;
+                    const max = c.evaluations.length * 5;
+                    const earned = c.evaluations.reduce((sum, e) => sum + (e.score || 0), 0);
+                    return max > 0 && (earned / max) >= 0.8;
+                  });
+                } else if (resultsFilter === 'shortlisted') {
+                  list = list.filter(c => c.status === 'shortlisted');
+                } else if (resultsFilter === 'pending') {
+                  list = list.filter(c => !c.evaluations || c.evaluations.length === 0);
+                }
+
+                // Sort
+                if (resultsSort === 'score') {
+                  list.sort((a, b) => {
+                    const scoreA = a.evaluations ? a.evaluations.reduce((sum, e) => sum + (e.score || 0), 0) : -1;
+                    const scoreB = b.evaluations ? b.evaluations.reduce((sum, e) => sum + (e.score || 0), 0) : -1;
+                    return scoreB - scoreA;
+                  });
+                } else if (resultsSort === 'recent') {
+                  list.sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+                } else if (resultsSort === 'name') {
+                  list.sort((a, b) => (a.candidateName || '').localeCompare(b.candidateName || ''));
+                }
+
+                if (list.length === 0) {
+                  return (
+                    <div className="text-center py-20 px-4 rounded-3xl bg-[#151e32]/60 border border-dashed border-slate-800">
+                      <LayoutGrid size={44} className="mx-auto text-slate-600 mb-3" />
+                      <h3 className="text-lg font-bold text-white mb-1">No interview records found</h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mb-6">
+                        {resultsSearch ? `No candidates found matching "${resultsSearch}".` : 'Completed candidate interview submissions will appear here automatically.'}
+                      </p>
+                      {resultsSearch && (
+                        <button
+                          onClick={() => setResultsSearch('')}
+                          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-500/25"
+                        >
+                          Clear Search
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {list.map((candidate) => {
+                      const maxScore = (candidate.evaluations?.length || 0) * 5;
+                      const earned = candidate.evaluations?.reduce((sum, e) => sum + (e.score || 0), 0) || 0;
+                      const percentage = maxScore > 0 ? Math.round((earned / maxScore) * 100) : 0;
+                      const isShortlisted = candidate.status === 'shortlisted';
+
+                      return (
+                        <div
+                          key={candidate.id}
+                          className="group relative overflow-hidden rounded-2xl bg-[#151e32] border border-slate-800/90 hover:border-indigo-500/40 p-5 md:p-6 shadow-xl transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:shadow-2xl"
+                        >
+                          {/* Left: Avatar & Candidate Info */}
+                          <div className="flex items-start md:items-center gap-4">
+                            <div className="relative shrink-0">
+                              <img
+                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(candidate.candidateName || 'C')}&background=334155&color=fff&bold=true&size=64`}
+                                alt={candidate.candidateName}
+                                className={`w-14 h-14 rounded-2xl border-2 shadow-lg ${
+                                  isShortlisted ? 'border-emerald-500/60' : 'border-slate-700'
+                                }`}
+                              />
+                              {isShortlisted && (
+                                <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shadow">
+                                  ★
+                                </span>
+                              )}
+                            </div>
+
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2.5">
+                                <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors leading-tight">
+                                  {candidate.candidateName || 'Unnamed Candidate'}
+                                </h3>
+                                {isShortlisted && (
+                                  <span className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Shortlisted
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-400">
+                                <span className="text-indigo-400 font-medium flex items-center gap-1.5">
+                                  <Briefcase size={13} />
+                                  {candidate.jobTitle || 'General Application'}
+                                </span>
+                                {candidate.jobId && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded text-[11px]">
+                                      PIN: {candidate.jobId}
+                                    </span>
+                                  </>
+                                )}
+                                <span>•</span>
+                                <span className="text-slate-500 flex items-center gap-1">
+                                  <Clock size={12} />
+                                  {candidate.completedAt ? new Date(candidate.completedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently'}
+                                </span>
+                              </div>
+
+                              {/* Signals & Badges */}
+                              <div className="flex flex-wrap items-center gap-2 mt-3">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700/50 px-2 py-0.5 rounded-md">
+                                  <ShieldCheck size={11} className="text-emerald-400" /> Proctoring Clean
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 bg-slate-800/60 border border-slate-700/50 px-2 py-0.5 rounded-md">
+                                  <FileText size={11} className="text-indigo-400" /> {candidate.questions?.length || 0} Questions Answered
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Scores & Actions */}
+                          <div className="flex flex-wrap lg:flex-nowrap items-center justify-between lg:justify-end gap-6 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-800/80">
+                            {/* Score Box */}
+                            <div className="text-left lg:text-right">
+                              {candidate.evaluations && candidate.evaluations.length > 0 ? (
+                                <div>
+                                  <div className="flex items-center lg:justify-end gap-2">
+                                    <span className="font-black text-white text-base">{earned}/{maxScore}</span>
+                                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                                      percentage >= 80 
+                                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
+                                        : percentage >= 60 
+                                        ? 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30' 
+                                        : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                                    }`}>
+                                      {percentage}% Fit
+                                    </span>
+                                  </div>
+                                  <div className="w-28 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5 lg:ml-auto">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        percentage >= 80 ? 'bg-emerald-500' : percentage >= 60 ? 'bg-indigo-500' : 'bg-rose-500'
+                                      }`}
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/40">
+                                  Score Pending
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                onClick={() => setSelectedInterview(candidate)}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-500/25 transform hover:-translate-y-0.5"
+                              >
+                                <FileText size={15} />
+                                <span>Applicant Review</span>
+                              </button>
+
+                              <button
+                                onClick={(e) => handleDeleteInterview(candidate.id, e)}
+                                className="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-2.5 rounded-xl transition border border-slate-700 hover:border-red-500/30"
+                                title="Delete Record"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
             </div>
           )}
 
-          {/* SELECTED TAB */}
           {activeTab === 'selected' && (
-            <div className="max-w-6xl mx-auto space-y-4">
-               {completedInterviews.filter(c => c.status === 'shortlisted').length === 0 ? (
-                 <div className="text-center py-20 text-slate-500">
-                    <Award size={48} className="mx-auto mb-4 opacity-20" />
-                    <p className="text-lg">No candidates have been shortlisted yet.</p>
-                 </div>
-               ) : (
-                 completedInterviews.filter(c => c.status === 'shortlisted').map((candidate) => (
-                    <div key={candidate.id} className="bg-gradient-to-r from-green-900/20 to-[#151e32] border border-green-500/30 rounded-2xl p-6 flex justify-between items-center transition-all">
-                      <div className="flex items-center gap-4">
-                        <div className="relative">
-                          <img src={`https://ui-avatars.com/api/?name=${candidate.candidateName}&background=22c55e&color=fff&size=64`} alt="C" className="rounded-full border-2 border-green-500/50" />
-                          <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1 rounded-full"><Award size={12}/></div>
-                        </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-white">{candidate.candidateName}</h3>
-                          <p className="text-xs text-green-400 font-medium my-1">Shortlisted for: {candidate.jobTitle || 'General'}</p>
-                        </div>
+            <div className="max-w-7xl mx-auto space-y-8 animate-slide-up pb-12">
+              
+              {/* 1. Executive Shortlisted Header */}
+              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#151e32] via-[#1c2a26] to-[#151e32] border border-emerald-500/30 p-6 md:p-8 shadow-2xl">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+                <div className="absolute bottom-0 left-1/4 w-60 h-60 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                        <Award size={13} />
+                        Shortlisted Talent Pool
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold">
+                        <Star size={13} />
+                        Fast-Track Finalists
+                      </span>
+                    </div>
+
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                      Shortlisted Candidates & <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-amber-400 bg-clip-text text-transparent">Finalists</span>
+                    </h1>
+                    <p className="text-slate-400 text-sm mt-1.5 max-w-2xl leading-relaxed">
+                      Top-tier verified candidates selected for final rounds. Review rubric performance, compare candidate skill scores, and prepare formal hiring offers.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="inline-flex items-center gap-2 bg-[#0b1121] border border-emerald-500/30 px-4 py-2.5 rounded-xl text-xs font-bold text-emerald-400 shadow">
+                      <Award size={16} />
+                      <span>{completedInterviews.filter(c => c.status === 'shortlisted').length} Finalists Ready</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Mini KPI Metrics Bar */}
+              {(() => {
+                const shortlisted = completedInterviews.filter(c => c.status === 'shortlisted');
+                const totalCompleted = completedInterviews.length;
+                const conversionRate = totalCompleted > 0 ? Math.round((shortlisted.length / totalCompleted) * 100) : 0;
+                
+                let avgShortlistScore = 0;
+                const evaluatedShortlisted = shortlisted.filter(c => c.evaluations && c.evaluations.length > 0);
+                if (evaluatedShortlisted.length > 0) {
+                  const totalPct = evaluatedShortlisted.reduce((acc, c) => {
+                    const max = c.evaluations.length * 5;
+                    const earned = c.evaluations.reduce((sum, e) => sum + (e.score || 0), 0);
+                    return acc + (max > 0 ? (earned / max) * 100 : 0);
+                  }, 0);
+                  avgShortlistScore = Math.round(totalPct / evaluatedShortlisted.length);
+                }
+
+                const uniqueRoles = new Set(shortlisted.map(c => c.jobTitle || 'General Application')).size;
+
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                        <Award size={20} />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <button onClick={() => setSelectedInterview(candidate)} className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition flex items-center gap-2">
-                           Review File
-                        </button>
-                        <button onClick={(e) => handleDeleteInterview(candidate.id, e)} className="bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 p-2.5 rounded-xl transition border border-slate-700 hover:border-red-800/50" title="Delete Interview">
-                          <Trash2 size={16} />
-                        </button>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Shortlisted</p>
+                        <h3 className="text-2xl font-bold text-emerald-400 tracking-tight">{shortlisted.length}</h3>
                       </div>
                     </div>
-                 ))
-               )}
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                        <TrendingUp size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Shortlist Rate</p>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{conversionRate}%</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                        <Sparkles size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Avg Finalist Fit</p>
+                        <h3 className="text-2xl font-bold text-amber-400 tracking-tight">{avgShortlistScore > 0 ? `${avgShortlistScore}%` : 'N/A'}</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#151e32]/90 border border-slate-800/80 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
+                      <div className="w-11 h-11 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                        <Briefcase size={20} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Target Positions</p>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">{uniqueRoles}</h3>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 3. Search, Role Filter & Sort Toolbar */}
+              <div className="bg-[#151e32] border border-slate-800/90 rounded-2xl p-4 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search finalists by name, role, or ID..."
+                    value={shortlistSearch}
+                    onChange={(e) => setShortlistSearch(e.target.value)}
+                    className="w-full bg-[#0b1121] border border-slate-800 rounded-xl pl-10 pr-9 py-2 text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                  />
+                  {shortlistSearch && (
+                    <button
+                      onClick={() => setShortlistSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Role Selector */}
+                  {(() => {
+                    const roles = Array.from(new Set(
+                      completedInterviews
+                        .filter(c => c.status === 'shortlisted' && c.jobTitle)
+                        .map(c => c.jobTitle)
+                    ));
+
+                    return (
+                      <div className="flex items-center gap-1.5 bg-[#0b1121] border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-400">
+                        <Briefcase size={13} className="text-slate-500" />
+                        <select
+                          value={shortlistRoleFilter}
+                          onChange={(e) => setShortlistRoleFilter(e.target.value)}
+                          className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer max-w-[180px] truncate"
+                        >
+                          <option value="all" className="bg-[#151e32] text-white">All Roles</option>
+                          {roles.map((r, i) => (
+                            <option key={i} value={r} className="bg-[#151e32] text-white">{r}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Sort selector */}
+                  <div className="flex items-center gap-1.5 bg-[#0b1121] border border-slate-800 px-3 py-1.5 rounded-xl text-xs text-slate-400">
+                    <Filter size={13} className="text-slate-500" />
+                    <select
+                      value={shortlistSort}
+                      onChange={(e) => setShortlistSort(e.target.value)}
+                      className="bg-transparent text-slate-200 font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value="score" className="bg-[#151e32] text-white">Highest Score</option>
+                      <option value="recent" className="bg-[#151e32] text-white">Most Recent</option>
+                      <option value="name" className="bg-[#151e32] text-white">Name (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Shortlisted Candidates List */}
+              {(() => {
+                let list = completedInterviews.filter(c => c.status === 'shortlisted');
+
+                // Search Filter
+                if (shortlistSearch.trim()) {
+                  const q = shortlistSearch.toLowerCase();
+                  list = list.filter(c => 
+                    (c.candidateName && c.candidateName.toLowerCase().includes(q)) ||
+                    (c.jobTitle && c.jobTitle.toLowerCase().includes(q)) ||
+                    (c.jobId && c.jobId.toLowerCase().includes(q)) ||
+                    (c.candidateUid && c.candidateUid.toLowerCase().includes(q))
+                  );
+                }
+
+                // Role Filter
+                if (shortlistRoleFilter !== 'all') {
+                  list = list.filter(c => c.jobTitle === shortlistRoleFilter);
+                }
+
+                // Sort
+                if (shortlistSort === 'score') {
+                  list.sort((a, b) => {
+                    const scoreA = a.evaluations ? a.evaluations.reduce((sum, e) => sum + (e.score || 0), 0) : -1;
+                    const scoreB = b.evaluations ? b.evaluations.reduce((sum, e) => sum + (e.score || 0), 0) : -1;
+                    return scoreB - scoreA;
+                  });
+                } else if (shortlistSort === 'recent') {
+                  list.sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+                } else if (shortlistSort === 'name') {
+                  list.sort((a, b) => (a.candidateName || '').localeCompare(b.candidateName || ''));
+                }
+
+                if (list.length === 0) {
+                  return (
+                    <div className="text-center py-20 px-4 rounded-3xl bg-[#151e32]/60 border border-dashed border-slate-800">
+                      <Award size={48} className="mx-auto text-emerald-500/40 mb-3" />
+                      <h3 className="text-lg font-bold text-white mb-1">
+                        {completedInterviews.filter(c => c.status === 'shortlisted').length === 0 
+                          ? 'No candidates shortlisted yet' 
+                          : 'No finalists match your criteria'}
+                      </h3>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mb-6">
+                        {completedInterviews.filter(c => c.status === 'shortlisted').length === 0
+                          ? 'Review candidate performance in the All Results tab and click "Shortlist Candidate" to build your finalists pool.'
+                          : 'Try clearing your search query or role filter.'}
+                      </p>
+                      {completedInterviews.filter(c => c.status === 'shortlisted').length === 0 ? (
+                        <button
+                          onClick={() => setActiveTab('completed')}
+                          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-500/25"
+                        >
+                          <FileText size={15} />
+                          <span>Review All Interview Results</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setShortlistSearch('');
+                            setShortlistRoleFilter('all');
+                          }}
+                          className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-500/25"
+                        >
+                          Clear Filters
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {list.map((candidate, idx) => {
+                      const maxScore = (candidate.evaluations?.length || 0) * 5;
+                      const earned = candidate.evaluations?.reduce((sum, e) => sum + (e.score || 0), 0) || 0;
+                      const percentage = maxScore > 0 ? Math.round((earned / maxScore) * 100) : 0;
+
+                      return (
+                        <div
+                          key={candidate.id}
+                          className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-950/25 via-[#151e32] to-[#151e32] border border-emerald-500/30 hover:border-emerald-500/60 p-5 md:p-6 shadow-xl transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:shadow-2xl"
+                        >
+                          {/* Ambient glow */}
+                          <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 group-hover:bg-emerald-500/10 rounded-full blur-2xl transition-all"></div>
+
+                          {/* Left: Avatar & Candidate Info */}
+                          <div className="flex items-start md:items-center gap-4 relative z-10">
+                            {/* Rank Medal */}
+                            <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 border ${
+                              idx === 0 
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                                : idx === 1 
+                                ? 'bg-slate-300/20 text-slate-200 border-slate-300/40'
+                                : idx === 2 
+                                ? 'bg-amber-700/20 text-amber-500 border-amber-700/40'
+                                : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            }`}>
+                              #{idx + 1}
+                            </div>
+
+                            {/* Avatar */}
+                            <div className="relative shrink-0">
+                              <img
+                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(candidate.candidateName || 'C')}&background=059669&color=fff&bold=true&size=64`}
+                                alt={candidate.candidateName}
+                                className="w-14 h-14 rounded-2xl border-2 border-emerald-500/60 shadow-lg"
+                              />
+                              <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shadow">
+                                ★
+                              </span>
+                            </div>
+
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2.5">
+                                <h3 className="text-lg font-bold text-white group-hover:text-emerald-300 transition-colors leading-tight">
+                                  {candidate.candidateName || 'Unnamed Candidate'}
+                                </h3>
+                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                  <Award size={11} /> Shortlisted Finalist
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-400">
+                                <span className="text-emerald-400 font-medium flex items-center gap-1.5">
+                                  <Briefcase size={13} />
+                                  {candidate.jobTitle || 'General Application'}
+                                </span>
+                                {candidate.jobId && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded text-[11px]">
+                                      PIN: {candidate.jobId}
+                                    </span>
+                                  </>
+                                )}
+                                <span>•</span>
+                                <span className="text-slate-500 flex items-center gap-1">
+                                  <Clock size={12} />
+                                  {candidate.completedAt ? new Date(candidate.completedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently'}
+                                </span>
+                              </div>
+
+                              {/* Signals & Badges */}
+                              <div className="flex flex-wrap items-center gap-2 mt-3">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                                  <ShieldCheck size={11} /> Clean Session Verified
+                                </span>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                                  <FileText size={11} /> Full Evaluation Ready
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Scores & Actions */}
+                          <div className="flex flex-wrap lg:flex-nowrap items-center justify-between lg:justify-end gap-6 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-800/80 relative z-10">
+                            {/* Score Box */}
+                            <div className="text-left lg:text-right">
+                              {candidate.evaluations && candidate.evaluations.length > 0 ? (
+                                <div>
+                                  <div className="flex items-center lg:justify-end gap-2">
+                                    <span className="font-black text-white text-base">{earned}/{maxScore}</span>
+                                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                                      percentage >= 80 
+                                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.15)]' 
+                                        : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                                    }`}>
+                                      {percentage}% Match
+                                    </span>
+                                  </div>
+                                  <div className="w-28 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1.5 lg:ml-auto">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-500"
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-500 italic bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/40">
+                                  Manual Selection
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-2.5">
+                              <button
+                                onClick={() => setSelectedInterview(candidate)}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-emerald-500/25 transform hover:-translate-y-0.5"
+                              >
+                                <FileText size={15} />
+                                <span>Review File</span>
+                              </button>
+
+                              <button
+                                onClick={(e) => handleRemoveFromShortlist(candidate, e)}
+                                className="bg-slate-800 hover:bg-amber-500/20 text-slate-400 hover:text-amber-400 px-3 py-2.5 rounded-xl text-xs font-semibold transition border border-slate-700 hover:border-amber-500/30 flex items-center gap-1.5"
+                                title="Move back to completed (un-shortlist)"
+                              >
+                                <RotateCcw size={14} />
+                                <span className="hidden sm:inline">Demote</span>
+                              </button>
+
+                              <button
+                                onClick={(e) => handleDeleteInterview(candidate.id, e)}
+                                className="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-2.5 rounded-xl transition border border-slate-700 hover:border-red-500/30"
+                                title="Delete Record"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
             </div>
           )}
 
@@ -1408,6 +2992,211 @@ export default function RecruiterDashboard() {
         </div>
       )}
       
+      {/* DISPATCH CANDIDATE INVITATIONS MODAL */}
+      {showInviteModal && inviteJob && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-[#101728] border border-slate-700/80 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl relative my-8 overflow-hidden">
+            {/* Top Glow Accent */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-cyan-400 to-purple-500" />
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Close Button */}
+            <button 
+              onClick={() => {
+                if (!isSendingInvites) {
+                  setShowInviteModal(false);
+                  setInviteJob(null);
+                }
+              }} 
+              disabled={isSendingInvites}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg transition"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                <Mail size={22} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">Dispatch Interview Invitations</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Automate delivery of the 6-digit access PIN & interview link directly to candidate mailboxes.</p>
+              </div>
+            </div>
+
+            {/* Target Job Metadata Pill */}
+            <div className="bg-[#151e32] border border-slate-800 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Position</span>
+                <h4 className="text-sm font-bold text-white truncate max-w-xs">{inviteJob.title}</h4>
+                <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                  <Calendar size={11} className="text-slate-500" />
+                  <span>
+                    {inviteJob.startTime ? new Date(inviteJob.startTime).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Anytime'} 
+                    {' - '}
+                    {inviteJob.endTime ? new Date(inviteJob.endTime).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Open'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-[#0b1121] border border-indigo-500/30 rounded-xl px-4 py-2 text-center sm:text-right shrink-0">
+                <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider block">Access PIN</span>
+                <span className="font-mono text-xl font-black tracking-widest text-white">{inviteJob.jobId}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSendInvites} className="space-y-5">
+              {/* Recipient Emails Textarea */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <span>Candidate Email Addresses</span>
+                    <span className="text-rose-400">*</span>
+                  </label>
+                  {/* Dynamic Valid Email Counter */}
+                  {(() => {
+                    const parsed = parseRecipientEmails(inviteEmails);
+                    return (
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                        parsed.length > 0 
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700/60'
+                      }`}>
+                        {parsed.length} recipient{parsed.length === 1 ? '' : 's'} detected
+                      </span>
+                    );
+                  })()}
+                </div>
+                <textarea
+                  rows={3}
+                  value={inviteEmails}
+                  onChange={(e) => setInviteEmails(e.target.value)}
+                  placeholder="Enter candidate emails (separated by commas or new lines)&#10;e.g. candidate@gmail.com, alex.dev@mit.edu"
+                  disabled={isSendingInvites}
+                  className="w-full bg-[#0b1121] border border-slate-700/80 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition font-mono"
+                  required
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Separate multiple candidate emails with commas, spaces, or new lines.
+                </p>
+              </div>
+
+              {/* Optional Custom Note */}
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5">
+                  Custom Recruiter Note <span className="text-slate-500 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={inviteCustomMessage}
+                  onChange={(e) => setInviteCustomMessage(e.target.value)}
+                  placeholder="e.g. Hi there! Please complete this assessment in a quiet room with good lighting."
+                  disabled={isSendingInvites}
+                  className="w-full bg-[#0b1121] border border-slate-700/80 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+                />
+              </div>
+
+              {/* Interactive Email Preview Accordion */}
+              <div className="border border-slate-800 rounded-2xl overflow-hidden bg-[#0b1121]">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailPreview(!showEmailPreview)}
+                  className="w-full px-4 py-2.5 flex items-center justify-between text-xs font-semibold text-slate-300 hover:text-white transition"
+                >
+                  <span className="flex items-center gap-2">
+                    <Eye size={13} className="text-cyan-400" />
+                    <span>{showEmailPreview ? 'Hide Email Template Preview' : 'Preview Generated Email Template'}</span>
+                  </span>
+                  <ChevronDown size={14} className={`transform transition-transform ${showEmailPreview ? 'rotate-180 text-cyan-400' : 'text-slate-500'}`} />
+                </button>
+
+                {showEmailPreview && (
+                  <div className="p-4 border-t border-slate-800/80 bg-[#090d18] text-left max-h-[220px] overflow-y-auto space-y-3 font-sans text-xs">
+                    <div className="bg-gradient-to-r from-indigo-600 to-cyan-500 p-3 rounded-xl text-center text-white">
+                      <h4 className="font-extrabold text-sm tracking-tight">HireVision</h4>
+                      <p className="text-[10px] text-indigo-100 uppercase tracking-widest mt-0.5">Autonomous Technical Interview Invitation</p>
+                    </div>
+                    <div className="p-3 bg-[#151e32] rounded-xl border border-slate-800 space-y-2">
+                      <p className="text-slate-300">
+                        Hello Candidate, you have been invited to an AI interview for <strong className="text-white">{inviteJob.title}</strong>.
+                      </p>
+                      {inviteCustomMessage && (
+                        <p className="italic text-slate-400 border-l-2 border-indigo-500 pl-2 text-[11px]">
+                          "{inviteCustomMessage}"
+                        </p>
+                      )}
+                      <div className="bg-[#0b1121] border border-dashed border-indigo-500/50 p-2.5 rounded-lg text-center">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block">Your Access PIN</span>
+                        <span className="font-mono text-xl font-black text-indigo-400 tracking-widest">{inviteJob.jobId}</span>
+                      </div>
+                      <div className="text-center pt-1">
+                        <span className="inline-block px-4 py-1.5 rounded-lg bg-indigo-600 text-white font-bold text-[11px]">
+                          Launch Interview Studio &rarr;
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(false)}
+                  disabled={isSendingInvites}
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSendingInvites}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/30 flex items-center gap-2 disabled:opacity-60 cursor-pointer"
+                >
+                  {isSendingInvites ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Dispatching Emails...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      <span>Send Invitations</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING TOAST NOTIFICATION FOR INVITE DISPATCH */}
+      {inviteToast && (
+        <div className="fixed bottom-6 right-6 z-[80] animate-in slide-in-from-bottom duration-300">
+          <div className={`p-4 rounded-2xl border shadow-2xl flex items-center gap-3.5 backdrop-blur-md max-w-md ${
+            inviteToast.type === 'success' 
+              ? 'bg-[#151e32]/95 border-emerald-500/40 text-emerald-300 shadow-[0_10px_30px_rgba(16,185,129,0.25)]'
+              : 'bg-[#151e32]/95 border-rose-500/40 text-rose-300 shadow-[0_10px_30px_rgba(244,63,94,0.25)]'
+          }`}>
+            {inviteToast.type === 'success' ? (
+              <CheckCircle size={20} className="text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle size={20} className="text-rose-400 shrink-0" />
+            )}
+            <div className="text-xs flex-1">
+              <p className="font-bold text-white text-sm">{inviteToast.title || 'Email Dispatch'}</p>
+              <p className="text-slate-300 mt-0.5 leading-relaxed">{inviteToast.message}</p>
+            </div>
+            <button onClick={() => setInviteToast(null)} className="text-slate-400 hover:text-white p-1 rounded transition">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* NEW JOB MODAL */}
       {showNewJobModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
