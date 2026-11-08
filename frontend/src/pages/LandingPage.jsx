@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import SplashScreen from './SplashScreen';
 import { 
   Sparkles, ArrowRight, CheckCircle2, ShieldCheck, BrainCircuit, Video, Mic, 
   Users, Briefcase, Zap, Star, ChevronDown, ChevronRight, Play, Eye, FileText, 
@@ -10,12 +11,59 @@ import {
 export default function LandingPage() {
   const navigate = useNavigate();
 
+  // Entrance animation & Expanding circle splash states (plays only before landing page loads)
+  const [showSplash, setShowSplash] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [revealedSections, setRevealedSections] = useState({});
+
+  // Triggered when 2nd ripple begins expanding (initiates navbar & hero sequence early for fluid handoff)
+  const handleSplashExpanding = useCallback(() => {
+    setTimeout(() => {
+      setIsLoaded(true);
+    }, 280);
+  }, []);
+
+  // Triggered when the 2nd circle has fully expanded across the entire screen
+  const handleSplashComplete = useCallback(() => {
+    setShowSplash(false);
+    setIsLoaded(true);
+  }, []);
+
   // Interactive states
   const [activeTab, setActiveTab] = useState('candidate'); // 'candidate' | 'recruiter'
   const [demoView, setDemoView] = useState('vision'); // 'vision' | 'evaluation'
   const [copiedPIN, setCopiedPIN] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
   const [simulatedScore, setSimulatedScore] = useState(94);
+
+  useEffect(() => {
+    // IntersectionObserver for downstream cascading sections
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const id = entry.target.getAttribute('data-reveal');
+            if (id) {
+              setRevealedSections((prev) => ({ ...prev, [id]: true }));
+            }
+          }
+        });
+      },
+      {
+        threshold: 0.12,
+        rootMargin: '0px 0px -40px 0px',
+      }
+    );
+
+    const elements = document.querySelectorAll('[data-reveal]');
+    elements.forEach((el) => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const isVisible = (id) => !!revealedSections[id];
 
   const handleCopyDemoPIN = () => {
     navigator.clipboard.writeText("849201");
@@ -57,8 +105,16 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#070b14] text-slate-200 font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
       
-      {/* Background Ambient Lighting */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-indigo-500/15 via-purple-500/10 to-transparent blur-[140px] pointer-events-none"></div>
+      {/* Expanding circle portal splash (plays only before landing page loads) */}
+      {showSplash && (
+        <SplashScreen 
+          onComplete={handleSplashComplete} 
+          onExpanding={handleSplashExpanding} 
+        />
+      )}
+
+      {/* Background Ambient Lighting with subtle organic breathe pulse */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-indigo-500/15 via-purple-500/10 to-transparent blur-[140px] pointer-events-none animate-pulse duration-1000"></div>
       <div className="absolute top-[800px] -left-40 w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none"></div>
       <div className="absolute top-[1600px] -right-40 w-[600px] h-[600px] bg-purple-500/10 rounded-full blur-[140px] pointer-events-none"></div>
 
@@ -66,12 +122,13 @@ export default function LandingPage() {
       {/* 1. STICKY NAVIGATION BAR                                 */}
       {/* ========================================================= */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#070b14]/80 border-b border-slate-800/80 px-6 lg:px-12 h-20 flex items-center justify-between transition-all">
-        {/* Brand Logo */}
+        
+        {/* Brand Logo - HV icon pops first, text & AI 2.0 slides in right after */}
         <div className="flex items-center gap-3.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-black text-lg shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+          <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-black text-lg shadow-[0_0_20px_rgba(99,102,241,0.4)] ${isLoaded ? 'anim-nav-logo-icon' : 'opacity-0'}`}>
             HV
           </div>
-          <div>
+          <div className={isLoaded ? 'anim-nav-logo-text' : 'opacity-0'}>
             <div className="flex items-center gap-2">
               <span className="text-xl font-black text-white tracking-tight">HireVision</span>
               <span className="text-[10px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-bold px-2 py-0.5 rounded uppercase tracking-wider">
@@ -82,26 +139,26 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Nav Links (Desktop) */}
+        {/* Nav Links (Desktop) - Animated one by one left to right */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
-          <a href="#features" className="hover:text-indigo-400 transition">Capabilities</a>
-          <a href="#simulator" className="hover:text-indigo-400 transition">Live Sandbox</a>
-          <a href="#workflow" className="hover:text-indigo-400 transition">How It Works</a>
-          <a href="#rubric" className="hover:text-indigo-400 transition">AI Rubric</a>
-          <a href="#faq" className="hover:text-indigo-400 transition">FAQ</a>
+          <a href="#features" className={`hover:text-indigo-400 transition ${isLoaded ? 'anim-nav-tab-1' : 'opacity-0'}`}>Capabilities</a>
+          <a href="#simulator" className={`hover:text-indigo-400 transition ${isLoaded ? 'anim-nav-tab-2' : 'opacity-0'}`}>Live Sandbox</a>
+          <a href="#workflow" className={`hover:text-indigo-400 transition ${isLoaded ? 'anim-nav-tab-3' : 'opacity-0'}`}>How It Works</a>
+          <a href="#rubric" className={`hover:text-indigo-400 transition ${isLoaded ? 'anim-nav-tab-4' : 'opacity-0'}`}>AI Rubric</a>
+          <a href="#faq" className={`hover:text-indigo-400 transition ${isLoaded ? 'anim-nav-tab-5' : 'opacity-0'}`}>FAQ</a>
         </nav>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - Slide in from right with subtle spring */}
         <div className="flex items-center gap-3.5">
           <button
             onClick={() => navigate('/login')}
-            className="hidden sm:inline-flex px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 border border-slate-800 transition"
+            className={`hidden sm:inline-flex px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 border border-slate-800 transition ${isLoaded ? 'anim-nav-btn-signin' : 'opacity-0'}`}
           >
             Sign In
           </button>
           <button
             onClick={() => navigate('/login')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-500/25 transition transform hover:scale-105 active:scale-95"
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-500/25 transition transform hover:scale-105 active:scale-95 ${isLoaded ? 'anim-nav-btn-launch' : 'opacity-0'}`}
           >
             <span>Launch Platform</span>
             <ArrowRight size={14} />
@@ -110,36 +167,38 @@ export default function LandingPage() {
       </header>
 
       {/* ========================================================= */}
-      {/* 2. HERO SECTION                                          */}
+      {/* 2. HERO SECTION - Sequential Element-by-Element Reveal     */}
       {/* ========================================================= */}
       <section className="relative pt-16 pb-24 px-6 lg:px-12 max-w-7xl mx-auto flex flex-col items-center text-center">
         
-        {/* Top Eyebrow Badge */}
-        <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold mb-8 shadow-sm">
+        {/* Step 1: Top Eyebrow Badge drops down with elastic settle */}
+        <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold mb-8 shadow-sm ${isLoaded ? 'anim-hero-eyebrow' : 'opacity-0'}`}>
           <Sparkles size={14} className="text-indigo-400 animate-spin" />
           <span>Next-Gen Technical Hiring & Interview Automation</span>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="text-slate-400 text-[11px]">Groq LLaMA 3.3 Engine</span>
         </div>
 
-        {/* Giant Kinetic Headline */}
+        {/* Step 2: Giant Kinetic Headline (Line 1 then Line 2) */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.08] max-w-5xl mb-6">
-          Autonomous Technical Interviews, <br className="hidden sm:block" />
-          <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">
+          <span className={`block ${isLoaded ? 'anim-hero-title-line1' : 'opacity-0'}`}>
+            Autonomous Technical Interviews,
+          </span>
+          <span className={`bg-gradient-to-r from-indigo-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent block mt-1 ${isLoaded ? 'anim-hero-title-line2' : 'opacity-0'}`}>
             Engineered for Unbiased Precision.
           </span>
         </h1>
 
-        {/* Subtitle */}
-        <p className="text-base sm:text-xl text-slate-400 max-w-3xl leading-relaxed mb-10">
+        {/* Step 3: Subtitle paragraph floats up smoothly */}
+        <p className={`text-base sm:text-xl text-slate-400 max-w-3xl leading-relaxed mb-10 ${isLoaded ? 'anim-hero-subtitle' : 'opacity-0'}`}>
           HireVision transforms engineering assessments. From resume-anchored question synthesis and neural camera framing calibration to real-time speech transcription and strict Groq rubric grading.
         </p>
 
-        {/* CTA Buttons */}
+        {/* Step 4: Hero CTA Buttons stagger in */}
         <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
           <button
             onClick={() => handleStartRole('candidate')}
-            className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-extrabold bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/30 transition transform hover:-translate-y-0.5 active:translate-y-0"
+            className={`inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-extrabold bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xl shadow-indigo-500/30 transition transform hover:-translate-y-0.5 active:translate-y-0 ${isLoaded ? 'anim-hero-cta-candidate' : 'opacity-0'}`}
           >
             <Users size={18} />
             <span>Enter as Candidate</span>
@@ -148,7 +207,7 @@ export default function LandingPage() {
 
           <button
             onClick={() => handleStartRole('recruiter')}
-            className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-extrabold bg-[#151e32] hover:bg-[#1a2540] text-slate-200 border border-slate-700/80 hover:border-indigo-500/50 shadow-xl transition transform hover:-translate-y-0.5 active:translate-y-0"
+            className={`inline-flex items-center gap-2.5 px-7 py-3.5 rounded-2xl text-sm font-extrabold bg-[#151e32] hover:bg-[#1a2540] text-slate-200 border border-slate-700/80 hover:border-indigo-500/50 shadow-xl transition transform hover:-translate-y-0.5 active:translate-y-0 ${isLoaded ? 'anim-hero-cta-recruiter' : 'opacity-0'}`}
           >
             <Briefcase size={18} className="text-indigo-400" />
             <span>Recruiter Command Center</span>
@@ -156,28 +215,28 @@ export default function LandingPage() {
 
           <a
             href="#simulator"
-            className="inline-flex items-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-semibold text-slate-400 hover:text-white transition"
+            className={`inline-flex items-center gap-2 px-5 py-3.5 rounded-2xl text-sm font-semibold text-slate-400 hover:text-white transition ${isLoaded ? 'anim-hero-cta-simulator' : 'opacity-0'}`}
           >
             <Play size={16} className="text-cyan-400" />
             <span>Explore Simulator</span>
           </a>
         </div>
 
-        {/* Metrics Ticker */}
-        <div className="w-full max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-4 p-6 rounded-3xl bg-[#11192e]/60 border border-slate-800/90 backdrop-blur-md shadow-2xl">
-          <div className="text-center p-3">
+        {/* Step 5: Metrics Ticker Container & 4 Cards load left-to-right */}
+        <div className={`w-full max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-4 p-6 rounded-3xl bg-[#11192e]/60 border border-slate-800/90 backdrop-blur-md shadow-2xl ${isLoaded ? 'anim-hero-metrics-box' : 'opacity-0'}`}>
+          <div className={`text-center p-3 ${isLoaded ? 'anim-hero-metric-1' : 'opacity-0'}`}>
             <h3 className="text-3xl font-black text-white mb-1">100%</h3>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Objective Rubric Scoring</p>
           </div>
-          <div className="text-center p-3">
+          <div className={`text-center p-3 ${isLoaded ? 'anim-hero-metric-2' : 'opacity-0'}`}>
             <h3 className="text-3xl font-black text-indigo-400 mb-1">&lt; 200ms</h3>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Groq Inference Latency</p>
           </div>
-          <div className="text-center p-3">
+          <div className={`text-center p-3 ${isLoaded ? 'anim-hero-metric-3' : 'opacity-0'}`}>
             <h3 className="text-3xl font-black text-emerald-400 mb-1">98.4%</h3>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Posture & Frame Stability</p>
           </div>
-          <div className="text-center p-3">
+          <div className={`text-center p-3 ${isLoaded ? 'anim-hero-metric-4' : 'opacity-0'}`}>
             <h3 className="text-3xl font-black text-purple-400 mb-1">6-Digit</h3>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Segmented PIN Protocol</p>
           </div>
@@ -189,7 +248,10 @@ export default function LandingPage() {
       {/* 3. INTERACTIVE LIVE SIMULATOR SANDBOX                    */}
       {/* ========================================================= */}
       <section id="simulator" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
-        <div className="text-center mb-12">
+        <div 
+          data-reveal="simulator-header"
+          className={`text-center mb-12 anim-section-reveal ${isVisible('simulator-header') ? 'is-visible' : ''}`}
+        >
           <span className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2 block">Real-time Platform Preview</span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Experience HireVision in Action</h2>
           <p className="text-slate-400 text-sm max-w-xl mx-auto mt-2">
@@ -217,8 +279,11 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Sandbox Window */}
-        <div className="relative rounded-3xl bg-[#11192e] border border-slate-700/80 p-6 md:p-8 shadow-2xl overflow-hidden">
+        {/* Sandbox Window with terminal glow */}
+        <div 
+          data-reveal="simulator-window"
+          className={`relative rounded-3xl bg-[#11192e] border border-slate-700/80 p-6 md:p-8 shadow-2xl overflow-hidden anim-terminal-glow anim-card-stagger ${isVisible('simulator-window') ? 'is-visible' : ''}`}
+        >
           {/* Top Window Bar */}
           <div className="flex items-center justify-between pb-6 mb-6 border-b border-slate-800 text-xs">
             <div className="flex items-center gap-2">
@@ -239,7 +304,10 @@ export default function LandingPage() {
           {demoView === 'vision' ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               {/* Left Column: Simulated Camera Oval */}
-              <div className="lg:col-span-5 flex flex-col items-center">
+              <div 
+                data-reveal="sim-vision-left"
+                className={`lg:col-span-5 flex flex-col items-center anim-card-stagger ${isVisible('sim-vision-left') ? 'is-visible' : ''}`}
+              >
                 <div className="relative w-64 h-80 rounded-[48px] bg-[#070b14] border-2 border-indigo-500/60 shadow-[0_0_30px_rgba(99,102,241,0.25)] flex items-center justify-center overflow-hidden">
                   {/* Subtle Grid scanline */}
                   <div className="absolute inset-0 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px] opacity-20"></div>
@@ -264,7 +332,10 @@ export default function LandingPage() {
               </div>
 
               {/* Right Column: Live Simulated Q&A */}
-              <div className="lg:col-span-7 space-y-4">
+              <div 
+                data-reveal="sim-vision-right"
+                className={`lg:col-span-7 space-y-4 anim-card-stagger ${isVisible('sim-vision-right') ? 'is-visible' : ''}`}
+              >
                 <div className="bg-[#151e32] border border-slate-700/60 rounded-2xl p-5 shadow-lg">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -312,7 +383,10 @@ export default function LandingPage() {
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
               {/* Recruiter Evaluation Report Simulation */}
-              <div className="lg:col-span-7 space-y-4">
+              <div 
+                data-reveal="sim-eval-left"
+                className={`lg:col-span-7 space-y-4 anim-card-stagger ${isVisible('sim-eval-left') ? 'is-visible' : ''}`}
+              >
                 <div className="bg-[#151e32] border border-slate-700/60 rounded-2xl p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
@@ -365,7 +439,10 @@ export default function LandingPage() {
               </div>
 
               {/* Right Column: Score Radar Card */}
-              <div className="lg:col-span-5 flex flex-col items-center">
+              <div 
+                data-reveal="sim-eval-right"
+                className={`lg:col-span-5 flex flex-col items-center anim-card-stagger ${isVisible('sim-eval-right') ? 'is-visible' : ''}`}
+              >
                 <div className="w-full bg-[#0b1121] border border-slate-800 rounded-2xl p-6 text-center shadow-xl">
                   <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-black text-3xl mx-auto mb-3 shadow-[0_0_25px_rgba(16,185,129,0.3)]">
                     96%
@@ -391,10 +468,13 @@ export default function LandingPage() {
       </section>
 
       {/* ========================================================= */}
-      {/* 4. PLATFORM CAPABILITIES (BENTO GRID)                     */}
+      {/* 4. PLATFORM CAPABILITIES (BENTO GRID - 6 Staggered Cards) */}
       {/* ========================================================= */}
       <section id="features" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
-        <div className="text-center mb-16">
+        <div 
+          data-reveal="features-header"
+          className={`text-center mb-16 anim-section-reveal ${isVisible('features-header') ? 'is-visible' : ''}`}
+        >
           <span className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2 block">System Architecture</span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Core Platform Capabilities</h2>
           <p className="text-slate-400 text-sm max-w-xl mx-auto mt-2">
@@ -404,7 +484,11 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Card 1: Resume Deep Dive */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-indigo-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-1"
+            style={{ transitionDelay: '0ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-indigo-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-1') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <FileText size={24} />
             </div>
@@ -415,7 +499,11 @@ export default function LandingPage() {
           </div>
 
           {/* Card 2: Neural Vision Proctoring */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-emerald-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-2"
+            style={{ transitionDelay: '80ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-emerald-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-2') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <ShieldCheck size={24} />
             </div>
@@ -426,7 +514,11 @@ export default function LandingPage() {
           </div>
 
           {/* Card 3: Groq LLaMA Scoring */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-cyan-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-3"
+            style={{ transitionDelay: '160ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-cyan-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-3') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <BrainCircuit size={24} />
             </div>
@@ -437,7 +529,11 @@ export default function LandingPage() {
           </div>
 
           {/* Card 4: 6-Digit PIN Protocol */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-purple-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-4"
+            style={{ transitionDelay: '240ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-purple-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-4') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <KeyIcon size={24} />
             </div>
@@ -448,7 +544,11 @@ export default function LandingPage() {
           </div>
 
           {/* Card 5: Live Waiting Room */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-red-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-5"
+            style={{ transitionDelay: '320ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-red-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-5') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <Radio size={24} />
             </div>
@@ -459,7 +559,11 @@ export default function LandingPage() {
           </div>
 
           {/* Card 6: My Resumes Vault */}
-          <div className="bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-amber-500/40 transition shadow-xl group">
+          <div 
+            data-reveal="features-6"
+            style={{ transitionDelay: '400ms' }}
+            className={`bg-[#11192e] border border-slate-800/90 rounded-3xl p-7 hover:border-amber-500/40 transition shadow-xl group anim-card-stagger ${isVisible('features-6') ? 'is-visible' : ''}`}
+          >
             <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
               <Award size={24} />
             </div>
@@ -475,7 +579,10 @@ export default function LandingPage() {
       {/* 5. WORKFLOW JOURNEY: CANDIDATE VS RECRUITER               */}
       {/* ========================================================= */}
       <section id="workflow" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
-        <div className="text-center mb-16">
+        <div 
+          data-reveal="workflow-header"
+          className={`text-center mb-16 anim-section-reveal ${isVisible('workflow-header') ? 'is-visible' : ''}`}
+        >
           <span className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2 block">Step-By-Step Workflow</span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">How HireVision Works</h2>
           <p className="text-slate-400 text-sm max-w-xl mx-auto mt-2">
@@ -506,7 +613,11 @@ export default function LandingPage() {
         {/* 3 Step Cards */}
         {activeTab === 'candidate' ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-c1"
+              style={{ transitionDelay: '0ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-c1') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-indigo-500/30 mb-4 block">01</span>
               <h3 className="text-lg font-bold text-white mb-2">PIN Launchpad & Resume</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -514,7 +625,11 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-c2"
+              style={{ transitionDelay: '120ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-c2') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-indigo-500/30 mb-4 block">02</span>
               <h3 className="text-lg font-bold text-white mb-2">Hardware Calibration</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -522,7 +637,11 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-c3"
+              style={{ transitionDelay: '240ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-c3') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-indigo-500/30 mb-4 block">03</span>
               <h3 className="text-lg font-bold text-white mb-2">Interactive AI Interview</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -532,7 +651,11 @@ export default function LandingPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-r1"
+              style={{ transitionDelay: '0ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-r1') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-purple-500/30 mb-4 block">01</span>
               <h3 className="text-lg font-bold text-white mb-2">Configure Campaign & PIN</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -540,7 +663,11 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-r2"
+              style={{ transitionDelay: '120ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-r2') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-purple-500/30 mb-4 block">02</span>
               <h3 className="text-lg font-bold text-white mb-2">Live Lobby Admission</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -548,7 +675,11 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative">
+            <div 
+              data-reveal="wf-r3"
+              style={{ transitionDelay: '240ms' }}
+              className={`bg-[#11192e] border border-slate-800 rounded-3xl p-7 relative anim-card-stagger ${isVisible('wf-r3') ? 'is-visible' : ''}`}
+            >
               <span className="text-4xl font-black text-purple-500/30 mb-4 block">03</span>
               <h3 className="text-lg font-bold text-white mb-2">Review & Shortlist</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
@@ -560,10 +691,13 @@ export default function LandingPage() {
       </section>
 
       {/* ========================================================= */}
-      {/* 6. AI RUBRIC STANDARD                                    */}
+      {/* 6. AI RUBRIC STANDARD (5-Tier Equalizer Cards)            */}
       {/* ========================================================= */}
       <section id="rubric" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
-        <div className="rounded-3xl bg-gradient-to-r from-[#11192e] via-[#152342] to-[#11192e] border border-slate-700/80 p-8 lg:p-12 shadow-2xl">
+        <div 
+          data-reveal="rubric-box"
+          className={`rounded-3xl bg-gradient-to-r from-[#11192e] via-[#152342] to-[#11192e] border border-slate-700/80 p-8 lg:p-12 shadow-2xl anim-section-reveal ${isVisible('rubric-box') ? 'is-visible' : ''}`}
+        >
           <div className="max-w-3xl mb-10">
             <span className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2 block">Objective Evaluation Standard</span>
             <h2 className="text-3xl font-extrabold text-white tracking-tight mb-3">The HireVision 5-Tier Scoring Rubric</h2>
@@ -573,31 +707,51 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-            <div className="bg-[#0b1121] border border-slate-800 p-4 rounded-2xl">
+            <div 
+              data-reveal="rubric-1"
+              style={{ transitionDelay: '0ms' }}
+              className={`bg-[#0b1121] border border-slate-800 p-4 rounded-2xl anim-card-stagger ${isVisible('rubric-1') ? 'is-visible' : ''}`}
+            >
               <span className="text-xs font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">Score 1</span>
               <h4 className="text-sm font-bold text-white mt-2 mb-1">Irrelevant</h4>
               <p className="text-[11px] text-slate-400">No relevant technical content or completely missed question scope.</p>
             </div>
 
-            <div className="bg-[#0b1121] border border-slate-800 p-4 rounded-2xl">
+            <div 
+              data-reveal="rubric-2"
+              style={{ transitionDelay: '70ms' }}
+              className={`bg-[#0b1121] border border-slate-800 p-4 rounded-2xl anim-card-stagger ${isVisible('rubric-2') ? 'is-visible' : ''}`}
+            >
               <span className="text-xs font-black text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">Score 2</span>
               <h4 className="text-sm font-bold text-white mt-2 mb-1">Generic</h4>
               <p className="text-[11px] text-slate-400">Vague overview lacking concrete implementation details or real ownership.</p>
             </div>
 
-            <div className="bg-[#0b1121] border border-slate-800 p-4 rounded-2xl">
+            <div 
+              data-reveal="rubric-3"
+              style={{ transitionDelay: '140ms' }}
+              className={`bg-[#0b1121] border border-slate-800 p-4 rounded-2xl anim-card-stagger ${isVisible('rubric-3') ? 'is-visible' : ''}`}
+            >
               <span className="text-xs font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Score 3</span>
               <h4 className="text-sm font-bold text-white mt-2 mb-1">Competent</h4>
               <p className="text-[11px] text-slate-400">Technically accurate but shallow. Demonstrates textbook recall.</p>
             </div>
 
-            <div className="bg-[#0b1121] border border-slate-800 p-4 rounded-2xl">
+            <div 
+              data-reveal="rubric-4"
+              style={{ transitionDelay: '210ms' }}
+              className={`bg-[#0b1121] border border-slate-800 p-4 rounded-2xl anim-card-stagger ${isVisible('rubric-4') ? 'is-visible' : ''}`}
+            >
               <span className="text-xs font-black text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">Score 4</span>
               <h4 className="text-sm font-bold text-white mt-2 mb-1">Proficient</h4>
               <p className="text-[11px] text-slate-400">Specific with real-world examples, debugging stories, and trade-off analysis.</p>
             </div>
 
-            <div className="bg-[#0b1121] border border-slate-800 p-4 rounded-2xl">
+            <div 
+              data-reveal="rubric-5"
+              style={{ transitionDelay: '280ms' }}
+              className={`bg-[#0b1121] border border-slate-800 p-4 rounded-2xl anim-card-stagger ${isVisible('rubric-5') ? 'is-visible' : ''}`}
+            >
               <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Score 5</span>
               <h4 className="text-sm font-bold text-white mt-2 mb-1">Exceptional</h4>
               <p className="text-[11px] text-slate-400">Deep architectural mastery with performance metrics, edge cases, and vision.</p>
@@ -610,7 +764,10 @@ export default function LandingPage() {
       {/* 7. FREQUENTLY ASKED QUESTIONS                             */}
       {/* ========================================================= */}
       <section id="faq" className="py-20 px-6 lg:px-12 max-w-4xl mx-auto">
-        <div className="text-center mb-12">
+        <div 
+          data-reveal="faq-header"
+          className={`text-center mb-12 anim-section-reveal ${isVisible('faq-header') ? 'is-visible' : ''}`}
+        >
           <span className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2 block">Common Questions</span>
           <h2 className="text-3xl font-extrabold text-white tracking-tight">Frequently Asked Questions</h2>
         </div>
@@ -621,7 +778,9 @@ export default function LandingPage() {
             return (
               <div 
                 key={index} 
-                className="rounded-2xl bg-[#11192e] border border-slate-800/80 overflow-hidden transition-all duration-200"
+                data-reveal={`faq-row-${index}`}
+                style={{ transitionDelay: `${index * 60}ms` }}
+                className={`rounded-2xl bg-[#11192e] border border-slate-800/80 overflow-hidden transition-all duration-200 anim-card-stagger ${isVisible(`faq-row-${index}`) ? 'is-visible' : ''}`}
               >
                 <button
                   onClick={() => toggleFaq(index)}
@@ -645,7 +804,10 @@ export default function LandingPage() {
       {/* 8. CALL TO ACTION BANNER                                  */}
       {/* ========================================================= */}
       <section className="py-16 px-6 lg:px-12 max-w-7xl mx-auto mb-16">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900/40 via-[#151e32] to-purple-900/40 border border-indigo-500/40 p-10 lg:p-16 text-center shadow-2xl">
+        <div 
+          data-reveal="cta-banner"
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-900/40 via-[#151e32] to-purple-900/40 border border-indigo-500/40 p-10 lg:p-16 text-center shadow-2xl anim-card-stagger ${isVisible('cta-banner') ? 'is-visible' : ''}`}
+        >
           <div className="absolute top-0 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
           <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
@@ -677,7 +839,10 @@ export default function LandingPage() {
       {/* ========================================================= */}
       {/* 9. FOOTER                                                 */}
       {/* ========================================================= */}
-      <footer className="border-t border-slate-800/80 bg-[#070b14] py-12 px-6 lg:px-12 text-xs text-slate-500">
+      <footer 
+        data-reveal="footer"
+        className={`border-t border-slate-800/80 bg-[#070b14] py-12 px-6 lg:px-12 text-xs text-slate-500 anim-section-reveal ${isVisible('footer') ? 'is-visible' : ''}`}
+      >
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">

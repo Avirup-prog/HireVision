@@ -29,3 +29,643 @@ body {
   opacity: 0;
   animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
 }
+
+/* ========================================================
+   STAGGERED DASHBOARD ENTRANCE ANIMATIONS (Sequence 1 to 7)
+   ======================================================== */
+
+@keyframes staggerSlideRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-36px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes staggerSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes staggerSlideDownRight {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) translateX(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0);
+  }
+}
+
+@keyframes staggerHeroScaleUp {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes staggerCardSlideLeft {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) translateX(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0);
+  }
+}
+
+@keyframes staggerRowUp {
+  0% {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 1: Left Sidebar */
+.animate-stagger-1 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerSlideRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
+}
+
+/* 2: Top Greeting Header */
+.animate-stagger-2 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerSlideDown 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.22s forwards;
+}
+
+/* 3: Top-Right Profile & System Status Pill Card */
+.animate-stagger-3 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerSlideDownRight 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.38s forwards;
+}
+
+/* 4: Center Main PIN Launchpad Card */
+.animate-stagger-4 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerHeroScaleUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) 0.52s forwards;
+}
+
+/* 5: Right Middle Pre-Flight Readiness Card */
+.animate-stagger-5 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerCardSlideLeft 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.70s forwards;
+}
+
+/* 6: Right Bottom Active Resume Vault Card */
+.animate-stagger-6 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerCardSlideLeft 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.85s forwards;
+}
+
+/* 7: Bottom Performance Breakdown & Recent Sessions */
+.animate-stagger-7 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerRowUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 1.00s forwards;
+}
+
+/* Staggered card items in lists (e.g. My Interviews) */
+@keyframes staggerListItem {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stagger-card {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: staggerListItem 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ========================================================
+   LANDING PAGE TOP-TO-BOTTOM CHOREOGRAPHED ANIMATIONS
+   ======================================================== */
+
+/* 1. Navbar Animations */
+@keyframes navLogoSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(-14deg);
+    filter: blur(6px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.15) rotate(2deg);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes navLogoTextSlide {
+  0% {
+    opacity: 0;
+    transform: translateX(-24px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes navTabDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-22px) scale(0.9);
+  }
+  70% {
+    transform: translateY(3px) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes navButtonSlideRight {
+  0% {
+    opacity: 0;
+    transform: translateX(28px) scale(0.92);
+  }
+  70% {
+    transform: translateX(-3px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.anim-nav-logo-icon {
+  opacity: 0;
+  will-change: transform, opacity, filter;
+  animation: navLogoSpring 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s forwards;
+}
+
+.anim-nav-logo-text {
+  opacity: 0;
+  will-change: transform, opacity, filter;
+  animation: navLogoTextSlide 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.22s forwards;
+}
+
+.anim-nav-tab-1 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navTabDrop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.32s forwards;
+}
+
+.anim-nav-tab-2 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navTabDrop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.40s forwards;
+}
+
+.anim-nav-tab-3 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navTabDrop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.48s forwards;
+}
+
+.anim-nav-tab-4 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navTabDrop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.56s forwards;
+}
+
+.anim-nav-tab-5 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navTabDrop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.64s forwards;
+}
+
+.anim-nav-btn-signin {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navButtonSlideRight 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.72s forwards;
+}
+
+.anim-nav-btn-launch {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: navButtonSlideRight 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.82s forwards;
+}
+
+/* 2. Hero Section Animations */
+@keyframes heroEyebrowDrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.9);
+  }
+  65% {
+    transform: translateY(4px) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heroHeadlineReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(38px) scale(0.97);
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes heroSubtitleReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(26px);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes heroCtaBounce {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.9);
+  }
+  70% {
+    transform: translateY(-4px) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heroMetricsContainer {
+  0% {
+    opacity: 0;
+    transform: translateY(36px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heroMetricItem {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.92);
+  }
+  70% {
+    transform: translateY(-2px) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.anim-hero-eyebrow {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroEyebrowDrop 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 0.92s forwards;
+}
+
+.anim-hero-title-line1 {
+  opacity: 0;
+  will-change: transform, opacity, filter;
+  animation: heroHeadlineReveal 0.75s cubic-bezier(0.16, 1, 0.3, 1) 1.05s forwards;
+}
+
+.anim-hero-title-line2 {
+  opacity: 0;
+  will-change: transform, opacity, filter;
+  animation: heroHeadlineReveal 0.75s cubic-bezier(0.16, 1, 0.3, 1) 1.20s forwards;
+}
+
+.anim-hero-subtitle {
+  opacity: 0;
+  will-change: transform, opacity, filter;
+  animation: heroSubtitleReveal 0.7s cubic-bezier(0.16, 1, 0.3, 1) 1.38s forwards;
+}
+
+.anim-hero-cta-candidate {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroCtaBounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 1.52s forwards;
+}
+
+.anim-hero-cta-recruiter {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroCtaBounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 1.64s forwards;
+}
+
+.anim-hero-cta-simulator {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroCtaBounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 1.74s forwards;
+}
+
+.anim-hero-metrics-box {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroMetricsContainer 0.7s cubic-bezier(0.16, 1, 0.3, 1) 1.85s forwards;
+}
+
+.anim-hero-metric-1 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroMetricItem 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 1.95s forwards;
+}
+
+.anim-hero-metric-2 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroMetricItem 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 2.05s forwards;
+}
+
+.anim-hero-metric-3 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroMetricItem 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 2.15s forwards;
+}
+
+.anim-hero-metric-4 {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: heroMetricItem 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 2.25s forwards;
+}
+
+/* 3. Cascading & Scroll Reveal Utilities */
+@keyframes sectionFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(36px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cardCascadePop {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.93);
+  }
+  70% {
+    transform: translateY(-3px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes terminalScanGlow {
+  0%, 100% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.15), inset 0 0 20px rgba(99, 102, 241, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 50px rgba(99, 102, 241, 0.35), inset 0 0 30px rgba(99, 102, 241, 0.1);
+  }
+}
+
+.anim-section-reveal {
+  opacity: 0;
+  transform: translateY(36px);
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.anim-section-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.anim-card-stagger {
+  opacity: 0;
+  transform: translateY(28px) scale(0.95);
+  transition: opacity 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.anim-card-stagger.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.anim-terminal-glow {
+  animation: terminalScanGlow 4s ease-in-out infinite;
+}
+
+/* ========================================================================= */
+/* 4. SPLASH SCREEN PORTAL & EXPANDING CIRCLE REVEAL ANIMATIONS             */
+/* ========================================================================= */
+
+/* Ambient breathing aura behind splash logo */
+@keyframes splashAuraPulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(0.95);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.18);
+    opacity: 0.75;
+  }
+}
+
+.anim-splash-aura {
+  animation: splashAuraPulse 3.5s ease-in-out infinite;
+}
+
+/* First ripple echo accentuation (triggered at 2.33s) */
+@keyframes splashRippleEcho1 {
+  0% {
+    width: 170px;
+    height: 170px;
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 25px rgba(56, 189, 248, 0.6), inset 0 0 15px rgba(56, 189, 248, 0.4);
+  }
+  100% {
+    width: 170px;
+    height: 170px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.0);
+    box-shadow: 0 0 50px rgba(56, 189, 248, 0);
+  }
+}
+
+.anim-splash-ripple-1 {
+  animation: splashRippleEcho1 1.25s cubic-bezier(0.25, 1, 0.5, 1) 2.33s forwards;
+}
+
+/* Second ripple: THE EXPANDING PORTAL HOLE & SHOCKWAVE RING (Surges to whole screen) */
+@keyframes portalExpandHole {
+  0% {
+    width: 280px;
+    height: 280px;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 9999px #0b1120, 0 0 45px rgba(56, 189, 248, 0.95), inset 0 0 35px rgba(56, 189, 248, 0.7);
+    border: 3px solid rgba(56, 189, 248, 0.95);
+  }
+  25% {
+    border-color: rgba(96, 165, 250, 1);
+    box-shadow: 0 0 0 9999px #0b1120, 0 0 75px rgba(56, 189, 248, 1), 0 0 150px rgba(59, 130, 246, 0.9), inset 0 0 50px rgba(56, 189, 248, 0.85);
+  }
+  75% {
+    border-color: rgba(56, 189, 248, 0.9);
+  }
+  100% {
+    width: 280px;
+    height: 280px;
+    transform: translate(-50%, -50%) scale(16);
+    box-shadow: 0 0 0 9999px #0b1120, 0 0 120px rgba(56, 189, 248, 0);
+    border: 2px solid rgba(56, 189, 248, 0);
+  }
+}
+
+.anim-portal-expanding-hole {
+  animation: portalExpandHole 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform;
+}
+
+/* Center optical flash/bloom on burst */
+@keyframes portalCoreFlash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  20% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.0);
+  }
+}
+
+.anim-portal-core-flash {
+  animation: portalCoreFlash 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Central logo dissolve during portal opening */
+@keyframes portalLogoDissolve {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.08);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+    filter: blur(14px);
+  }
+}
+
+.anim-portal-logo-dissolve {
+  animation: portalLogoDissolve 0.75s ease-out forwards;
+}
+
+/* Particle sparkles bursting outward with the expanding circle */
+@keyframes portalSparkleBurst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--sparkle-rot)) translateY(135px) scale(0.7);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--sparkle-rot)) translateY(700px) scale(2.0);
+  }
+}
+
+.anim-portal-sparkle {
+  animation: portalSparkleBurst 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Accessible reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .anim-splash-aura,
+  .anim-splash-ripple-1,
+  .anim-portal-expanding-hole,
+  .anim-portal-core-flash,
+  .anim-portal-logo-dissolve,
+  .anim-portal-sparkle,
+  .anim-nav-logo-icon,
+  .anim-nav-logo-text,
+  .anim-nav-tab-1,
+  .anim-nav-tab-2,
+  .anim-nav-tab-3,
+  .anim-nav-tab-4,
+  .anim-nav-tab-5,
+  .anim-nav-btn-signin,
+  .anim-nav-btn-launch,
+  .anim-hero-eyebrow,
+  .anim-hero-title-line1,
+  .anim-hero-title-line2,
+  .anim-hero-subtitle,
+  .anim-hero-cta-candidate,
+  .anim-hero-cta-recruiter,
+  .anim-hero-cta-simulator,
+  .anim-hero-metrics-box,
+  .anim-hero-metric-1,
+  .anim-hero-metric-2,
+  .anim-hero-metric-3,
+  .anim-hero-metric-4,
+  .anim-section-reveal,
+  .anim-card-stagger {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+

@@ -11,6 +11,7 @@ import { collection, getDocs, orderBy, query, where, addDoc, onSnapshot, doc, up
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { API_BASE_URL } from '../config/api';
+import ApplicantReviewPortal from '../components/ApplicantReviewPortal';
 
 export default function RecruiterDashboard() {
   const navigate = useNavigate();
@@ -2799,197 +2800,15 @@ export default function RecruiterDashboard() {
 
       {/* FULL SCREEN APPLICANT REVIEW PORTAL */}
       {selectedInterview && (
-        <div className="fixed inset-0 z-50 bg-[#050810] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-           
-           {/* Portal Header */}
-           <div className="h-16 border-b border-slate-800/80 bg-[#0b1121] px-6 flex justify-between items-center shrink-0">
-             <div className="flex items-center gap-4">
-               <button onClick={() => setSelectedInterview(null)} className="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 p-2 rounded-full transition">
-                 <X size={20}/>
-               </button>
-               <div className="h-6 w-px bg-slate-700"></div>
-               <h2 className="text-xl font-bold text-white">Applicant Review Portal</h2>
-             </div>
-             
-             <div className="flex items-center gap-3">
-               {selectedInterview.status === 'shortlisted' ? (
-                  <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
-                    <CheckCircle size={16} /> Candidate Shortlisted
-                  </span>
-               ) : (
-                  <button onClick={handleShortlist} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg font-medium text-sm transition shadow-lg shadow-green-600/20 flex items-center gap-2">
-                    <Award size={16} /> Shortlist Candidate
-                  </button>
-               )}
-             </div>
-           </div>
-
-           {/* Portal Grid */}
-           <div className="flex-1 overflow-y-auto p-6 md:p-8">
-             <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* LEFT COLUMN: Metadata & Video */}
-                <div className="space-y-6 lg:col-span-1">
-                   
-                   {/* Candidate Profile Card */}
-                   <div className="bg-[#151e32] border border-slate-700/80 rounded-2xl p-6">
-                      <div className="flex items-center gap-4 mb-6">
-                         <img src={`https://ui-avatars.com/api/?name=${selectedInterview.candidateName}&background=4f46e5&color=fff&size=80`} className="rounded-full shadow-lg" alt="Avatar"/>
-                         <div>
-                            <h3 className="text-2xl font-bold text-white leading-tight">{selectedInterview.candidateName}</h3>
-                            <p className="text-indigo-400 font-medium text-sm mt-1">{selectedInterview.jobTitle}</p>
-                         </div>
-                      </div>
-                      
-                      <div className="space-y-3 text-sm">
-                         <div className="flex justify-between border-b border-slate-800 pb-2">
-                           <span className="text-slate-500">Email / UID</span>
-                           <span className="text-slate-300 font-mono text-xs">{selectedInterview.candidateUid.substring(0,8)}...</span>
-                         </div>
-                         <div className="flex justify-between border-b border-slate-800 pb-2">
-                           <span className="text-slate-500">Phone</span>
-                           <span className="text-slate-300">{candidateProfile?.phone || 'Not provided'}</span>
-                         </div>
-                         <div className="flex justify-between border-b border-slate-800 pb-2">
-                           <span className="text-slate-500">Education</span>
-                           <span className="text-slate-300">{candidateProfile?.university ? `${candidateProfile.university} (${candidateProfile.gradYear})` : 'Not provided'}</span>
-                         </div>
-                         <div className="flex justify-between pb-2">
-                           <span className="text-slate-500">LinkedIn</span>
-                           <span className="text-blue-400 underline cursor-pointer">{candidateProfile?.linkedin || 'Not provided'}</span>
-                         </div>
-                      </div>
-                   </div>
-
-                   {/* Video Recording Placeholder */}
-                   <div className="bg-[#151e32] border border-slate-700/80 rounded-2xl overflow-hidden">
-                      <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/30">
-                        <h4 className="font-semibold text-white flex items-center gap-2"><Video size={16} className="text-indigo-400"/> Session Recording</h4>
-                      </div>
-                      <div className="relative aspect-video bg-black flex items-center justify-center group cursor-pointer">
-                         <img src={`https://images.unsplash.com/photo-1573164713988-8665fc963095?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80`} className="absolute inset-0 opacity-40 object-cover grayscale group-hover:grayscale-0 transition" alt="Video Placeholder"/>
-                         <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center relative z-10 group-hover:scale-110 transition">
-                           <Play size={20} fill="white" className="text-white ml-1" />
-                         </div>
-                         <div className="absolute bottom-2 left-2 bg-black/60 text-[10px] text-white px-2 py-1 rounded font-mono">14:22 / 18:45</div>
-                      </div>
-                   </div>
-
-                   {/* AI Vision & DeepFake Metrics Placeholder */}
-                     <div className="bg-[#151e32] border border-slate-700/80 rounded-2xl p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                           <ShieldAlert size={20} className={selectedInterview.proctoringFlags && selectedInterview.proctoringFlags.length > 0 ? "text-red-400" : "text-green-400"} />
-                           <h4 className="font-bold text-white">AI Proctoring Log</h4>
-                        </div>
-                        
-                        {!selectedInterview.proctoringFlags || selectedInterview.proctoringFlags.length === 0 ? (
-                          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
-                             <CheckCircle size={24} className="text-green-400 mx-auto mb-2" />
-                             <p className="text-green-400 text-sm font-medium">No suspicious behavior detected.</p>
-                          </div>
-                        ) : (
-                          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                             <p className="text-red-400 font-bold text-xs uppercase mb-3 border-b border-red-500/30 pb-2">{selectedInterview.proctoringFlags.length} Flag(s) Triggered</p>
-                             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                               {selectedInterview.proctoringFlags.map((flag, idx) => (
-                                 <div key={idx} className="flex flex-col gap-1">
-                                   <span className="text-red-300 font-medium text-sm">{flag.issue}</span>
-                                   <span className="text-slate-500 text-xs font-mono">{flag.time}</span>
-                                 </div>
-                               ))}
-                             </div>
-                          </div>
-                        )}
-                     </div>
-                  </div>
-
-                  {/* RIGHT COLUMN: Semantics & Transcript */}
-                <div className="space-y-6 lg:col-span-2">
-                   
-                   {/* AI Answer Evaluation */}
-                   <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/10 border border-indigo-500/30 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                      <div className="flex gap-6 items-center">
-                        <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 flex items-center justify-center shrink-0 border border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
-                           <Brain size={32} className="text-indigo-400" />
-                        </div>
-                        <div>
-                           <h4 className="text-lg font-bold text-white mb-1">AI Answer Evaluation</h4>
-                           <p className="text-sm text-slate-400">Deep semantic scoring of candidate responses against expected signals.</p>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        {selectedInterview.evaluations ? (
-                           <div className="bg-[#0b1121] px-6 py-3 rounded-xl border border-indigo-500/30 flex flex-col items-center justify-center">
-                              <p className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">Overall Score</p>
-                              <p className="text-2xl font-bold text-white">{selectedInterview.overall_score}<span className="text-sm text-slate-500">/10</span></p>
-                           </div>
-                        ) : (
-                           <button onClick={handleEvaluateAnswers} disabled={isEvaluating} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold transition whitespace-nowrap shadow-lg shadow-indigo-500/20">
-                             {isEvaluating ? 'Analyzing...' : 'Evaluate with AI'}
-                           </button>
-                        )}
-                      </div>
-                   </div>
-
-                   {/* Transcript Section */}
-                   <div className="bg-[#151e32] border border-slate-700/80 rounded-2xl overflow-hidden flex flex-col h-[600px]">
-                      <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/30 shrink-0">
-                        <h4 className="font-semibold text-white flex items-center gap-2"><FileText size={16} className="text-indigo-400"/> Full AI Transcript</h4>
-                        <span className="text-xs text-slate-500">{selectedInterview.questions.length} Q&A Pairs</span>
-                      </div>
-                      
-                      <div className="p-6 overflow-y-auto space-y-6 flex-1">
-                        {selectedInterview.questions && selectedInterview.questions.map((q, index) => {
-                          const evalData = selectedInterview.evaluations ? selectedInterview.evaluations[index] : null;
-                          return (
-                          <div key={index} className="space-y-4 pb-6 border-b border-slate-800/50 last:border-0">
-                            {/* AI Question Bubble */}
-                            <div className="flex gap-3 max-w-[85%]">
-                              <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-lg">
-                                <span className="text-white text-xs font-bold">AI</span>
-                              </div>
-                              <div className="bg-[#0b1121] border border-slate-700 rounded-2xl rounded-tl-sm p-4 text-sm text-slate-200">
-                                {typeof q === 'string' ? q : q.text}
-                              </div>
-                            </div>
-                            
-                            {/* Candidate Answer Bubble */}
-                            <div className="flex gap-3 justify-end">
-                              <div className="bg-indigo-600/20 border border-indigo-500/30 rounded-2xl rounded-tr-sm p-4 text-sm text-slate-200 max-w-[85%]">
-                                {selectedInterview.answers && selectedInterview.answers[index + (selectedInterview.answers.length - selectedInterview.questions.length)] ? selectedInterview.answers[index + (selectedInterview.answers.length - selectedInterview.questions.length)] : <span className="text-slate-500 italic">No answer recorded.</span>}
-                              </div>
-                              <img src={`https://ui-avatars.com/api/?name=${selectedInterview.candidateName}&background=4f46e5&color=fff&size=40`} className="w-8 h-8 rounded-full shrink-0 shadow-lg" alt="C"/>
-                            </div>
-
-                            {/* Evaluation Data */}
-                            {evalData && (
-                              <div className="ml-11 max-w-[80%] bg-[#0b1121] border-l-2 border-indigo-500 p-4 rounded-r-xl">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <span className="text-xs font-bold text-slate-400">Score:</span>
-                                  <span className={`text-sm font-bold ${evalData.score >= 4 ? 'text-green-400' : evalData.score === 3 ? 'text-yellow-400' : 'text-red-400'}`}>{evalData.score}/5</span>
-                                </div>
-                                <p className="text-xs text-slate-300 mb-3">{evalData.feedback}</p>
-                                
-                                {evalData.signals_missed && evalData.signals_missed.length > 0 && (
-                                  <div className="mt-2">
-                                    <p className="text-[10px] uppercase text-red-400 font-bold mb-1">Missed Signals</p>
-                                    <ul className="list-disc pl-4 text-xs text-slate-400">
-                                      {evalData.signals_missed.map((s, i) => <li key={i}>{s}</li>)}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )})}
-                      </div>
-                   </div>
-
-                </div>
-             </div>
-           </div>
-        </div>
+        <ApplicantReviewPortal 
+          interview={selectedInterview}
+          candidateProfile={candidateProfile}
+          onClose={() => setSelectedInterview(null)}
+          onShortlist={handleShortlist}
+          onEvaluateAnswers={handleEvaluateAnswers}
+          isEvaluating={isEvaluating}
+          onUpdateInterview={(updated) => setSelectedInterview(updated)}
+        />
       )}
       
       {/* DISPATCH CANDIDATE INVITATIONS MODAL */}

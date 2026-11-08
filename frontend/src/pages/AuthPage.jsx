@@ -9,6 +9,7 @@ import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import SplashScreen from './SplashScreen';
+import { API_BASE_URL } from '../config/api';
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -57,9 +58,44 @@ export default function AuthPage() {
              name: name,
              email: email,
              company: company,
+             role: 'recruiter',
              createdAt: new Date().toISOString()
           });
+        } else {
+          await setDoc(doc(db, 'candidates', userCredential.user.uid), {
+             uid: userCredential.user.uid,
+             fullName: name,
+             email: email,
+             role: 'candidate',
+             createdAt: new Date().toISOString()
+          }, { merge: true });
         }
+
+        // Trigger automated welcoming email based on role (candidate vs recruiter)
+        try {
+          const welcomePromise = fetch(`${API_BASE_URL}/api/send-welcome-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({
+              email: email.trim(),
+              name: name ? name.trim() : email.split('@')[0],
+              role: role,
+              company: company ? company.trim() : ''
+            })
+          }).then(res => res.json()).then(data => {
+            console.log('[Welcome Email] Dispatch response:', data);
+          }).catch(err => console.warn('[Welcome Email] Dispatch warning:', err));
+
+          // Await up to 2.5s to ensure SMTP handoff completes before splash screen
+          await Promise.race([
+            welcomePromise,
+            new Promise(resolve => setTimeout(resolve, 2500))
+          ]);
+        } catch (mailErr) {
+          console.warn('[Welcome Email] Could not dispatch welcome email:', mailErr);
+        }
+
         sessionStorage.setItem('hirevision_role', role);
         setShowAuthSplash(true);
         setTimeout(() => {

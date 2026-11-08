@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import CandidateInterview from './pages/CandidateInterview';
 import RecruiterAnalytics from './pages/RecruiterAnalytics';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AuthPage from './pages/AuthPage';
 import CandidateProfile from './pages/CandidateProfile';
-import SplashScreen from './pages/SplashScreen';
 import LandingPage from './pages/LandingPage';
-
 
 const ProtectedRoute = ({ children, allowedRole }) => {
   const currentRole = sessionStorage.getItem('hirevision_role');
@@ -26,21 +23,13 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 };
 
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 5500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (showSplash) {
-    return <SplashScreen />;
-  }
-
   return (
     <Router>
       <Routes>
+        {/* Landing Page (hosts the dedicated entrance animation & expanding circle splash) */}
         <Route path="/" element={<LandingPage />} />
+        
+        {/* Auth Route */}
         <Route path="/login" element={<AuthPage />} />
         
         {/* Candidate Routes */}

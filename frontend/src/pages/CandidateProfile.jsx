@@ -135,6 +135,8 @@ export default function CandidateProfile() {
 
   // Live Network Latency (Ping in ms)
   const [networkPing, setNetworkPing] = useState(null);
+  const [dashboardAnimKey, setDashboardAnimKey] = useState(0);
+  const [interviewsAnimKey, setInterviewsAnimKey] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -910,8 +912,8 @@ export default function CandidateProfile() {
   return (
     <div className="h-screen w-full bg-[#0b1120] flex text-slate-300 font-sans overflow-hidden">
       
-      {/* SIDEBAR */}
-      <aside className="w-64 h-full bg-[#151e32] border-r border-slate-700/50 flex flex-col shrink-0 hidden md:flex select-none z-30">
+      {/* SIDEBAR - Element 1 */}
+      <aside className="w-64 h-full bg-[#151e32] border-r border-slate-700/50 flex flex-col shrink-0 hidden md:flex select-none z-30 animate-stagger-1">
         {/* BRAND & LOGO */}
         <div className="p-6 border-b border-slate-700/50 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-black text-lg shadow-[0_0_20px_rgba(99,102,241,0.4)] shrink-0">
@@ -928,7 +930,7 @@ export default function CandidateProfile() {
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button 
-            onClick={() => setActiveTab('dashboard')} 
+            onClick={() => { setActiveTab('dashboard'); setDashboardAnimKey(prev => prev + 1); }} 
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <Home size={18} />
@@ -936,7 +938,7 @@ export default function CandidateProfile() {
           </button>
           
           <button 
-            onClick={() => setActiveTab('interviews')} 
+            onClick={() => { setActiveTab('interviews'); setInterviewsAnimKey(prev => prev + 1); }} 
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition ${activeTab === 'interviews' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <List size={18} />
@@ -971,10 +973,10 @@ export default function CandidateProfile() {
       </aside>
 
       {/* MOBILE HEADER (Visible only on small screens) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#151e32] border-b border-slate-700/50 z-40 flex items-center justify-between px-4">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#151e32] border-b border-slate-700/50 z-40 flex items-center justify-between px-4 animate-stagger-1">
          <div className="font-bold text-white flex items-center gap-2"><Video size={20} className="text-indigo-400"/> HireVision</div>
          <div className="flex gap-2">
-            <button onClick={() => setActiveTab('dashboard')} className={`p-2 rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><Home size={20}/></button>
+            <button onClick={() => { setActiveTab('dashboard'); setDashboardAnimKey(prev => prev + 1); }} className={`p-2 rounded-lg ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><Home size={20}/></button>
             <button onClick={() => setActiveTab('settings')} className={`p-2 rounded-lg ${activeTab === 'settings' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><Settings size={20}/></button>
          </div>
       </div>
@@ -984,11 +986,12 @@ export default function CandidateProfile() {
         
         {/* TAB: DASHBOARD (STUNNING REDESIGN) */}
         {activeTab === 'dashboard' && (
-          <div className="max-w-6xl mx-auto flex flex-col pt-2 md:pt-4 pb-20 space-y-8 animate-in fade-in duration-300">
+          <div key={dashboardAnimKey} className="max-w-6xl mx-auto flex flex-col pt-2 md:pt-4 pb-20 space-y-8">
              
              {/* 1. HERO HEADER WITH LIVE STATUS PILLS */}
              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-2 border-b border-slate-800/80">
-                <div>
+                {/* Element 2: Greeting Header */}
+                <div className="animate-stagger-2">
                    <div className="flex items-center gap-2 mb-2">
                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-pulse" />
                      <span className="text-emerald-400 font-bold text-xs uppercase tracking-wider">
@@ -1011,7 +1014,8 @@ export default function CandidateProfile() {
                 </div>
 
                 {/* Right side: Candidate Profile Info Card & Pre-Flight Health Pills */}
-                <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-3 shrink-0">
+                {/* Element 3: Profile & System Health Pills */}
+                <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-3 shrink-0 animate-stagger-3">
                    {/* Candidate Profile Info Card */}
                    <div className="bg-[#151e32] border border-slate-700/80 hover:border-indigo-500/40 rounded-2xl p-2.5 px-4 flex items-center gap-3.5 shadow-lg transition">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-cyan-500 flex items-center justify-center text-white font-bold text-base shadow-md shrink-0">
@@ -1058,7 +1062,8 @@ export default function CandidateProfile() {
              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
                 
                 {/* HERO LAUNCHPAD CARD (7 Columns) */}
-                <div className="lg:col-span-7 bg-gradient-to-br from-[#151e32] via-[#101728] to-[#151e32] border border-indigo-500/30 rounded-3xl p-7 md:p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between group">
+                {/* Element 4: Center Main Launchpad PIN Card */}
+                <div className="lg:col-span-7 bg-gradient-to-br from-[#151e32] via-[#101728] to-[#151e32] border border-indigo-500/30 rounded-3xl p-7 md:p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between group animate-stagger-4">
                    {/* Ambient Glow */}
                    <div className="absolute -top-24 -right-24 w-60 h-60 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/25 transition-all duration-500" />
                    <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
@@ -1131,7 +1136,8 @@ export default function CandidateProfile() {
                 <div className="lg:col-span-5 flex flex-col gap-6">
                    
                    {/* SYSTEM & VISION HEALTH CARD */}
-                   <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                   {/* Element 5: Pre-Flight Readiness Card */}
+                   <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl relative overflow-hidden animate-stagger-5">
                       <div className="flex items-center justify-between mb-4">
                          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                             <Sparkles size={16} className="text-indigo-400" />
@@ -1193,7 +1199,8 @@ export default function CandidateProfile() {
                    </div>
 
                    {/* ACTIVE RESUME VAULT QUICK CARD */}
-                   <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl flex-1 flex flex-col justify-between">
+                   {/* Element 6: Active Resume Vault Card */}
+                   <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl flex-1 flex flex-col justify-between animate-stagger-6">
                       <div>
                          <div className="flex items-center justify-between mb-3">
                             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -1244,7 +1251,8 @@ export default function CandidateProfile() {
              </div>
 
              {/* 3. PERFORMANCE RADAR & RECENT SESSIONS ROW */}
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+             {/* Element 7: Performance & Recent Sessions Row */}
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full animate-stagger-7">
                 
                 {/* AI PERFORMANCE BREAKDOWN (1 Column) */}
                 <div className="bg-[#151e32] border border-slate-700/80 rounded-3xl p-6 shadow-xl flex flex-col justify-between">
@@ -1306,7 +1314,7 @@ export default function CandidateProfile() {
                             <span>Recent Interview History</span>
                          </h3>
                          <button
-                           onClick={() => setActiveTab('interviews')}
+                           onClick={() => { setActiveTab('interviews'); setInterviewsAnimKey(prev => prev + 1); }}
                            className="text-xs text-indigo-400 hover:text-indigo-300 font-bold transition flex items-center gap-1 cursor-pointer"
                          >
                             <span>View All ({pastInterviews.length})</span>
@@ -1356,9 +1364,10 @@ export default function CandidateProfile() {
 
                                      <button
                                        onClick={() => {
-                                         setSelectedPastInterview(interview);
-                                         setActiveTab('interviews');
-                                       }}
+                                          setSelectedPastInterview(interview);
+                                          setActiveTab('interviews');
+                                          setInterviewsAnimKey(prev => prev + 1);
+                                        }}
                                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-400 hover:text-white transition cursor-pointer"
                                        title="View Details"
                                      >
@@ -1391,9 +1400,9 @@ export default function CandidateProfile() {
         )}
         {/* TAB: MY INTERVIEWS REDESIGNED */}
         {activeTab === 'interviews' && (
-          <div className="max-w-5xl mx-auto flex flex-col pt-2 md:pt-6 pb-20">
-            {/* Header section */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div key={interviewsAnimKey} className="max-w-5xl mx-auto flex flex-col pt-2 md:pt-6 pb-20">
+                        {/* Header section - Element 2 */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 animate-stagger-2">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
@@ -1402,6 +1411,13 @@ export default function CandidateProfile() {
                   <span className="text-xs text-slate-400">
                     {pastInterviews.length} Total Record{pastInterviews.length !== 1 ? 's' : ''}
                   </span>
+                  <button
+                    onClick={() => setInterviewsAnimKey(k => k + 1)}
+                    className="p-1 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-slate-800/80 transition ml-1 cursor-pointer"
+                    title="Replay entrance animation"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
                 </div>
                 <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">My Interviews</h1>
                 <p className="text-slate-400 text-sm mt-1 max-w-xl">
@@ -1410,7 +1426,7 @@ export default function CandidateProfile() {
               </div>
 
               <button
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => { setActiveTab('dashboard'); setDashboardAnimKey(k => k + 1); }}
                 className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl font-bold text-sm transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
               >
                 <Play size={16} fill="white" />
@@ -1418,8 +1434,8 @@ export default function CandidateProfile() {
               </button>
             </div>
 
-            {/* Quick Analytics Overview Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                        {/* Quick Analytics Overview Cards - Element 3 */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-stagger-3">
               <div className="bg-[#151e32] border border-slate-700/70 rounded-2xl p-4 flex items-center gap-3.5">
                 <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
                   <Video size={20} />
@@ -1471,8 +1487,8 @@ export default function CandidateProfile() {
               </div>
             </div>
 
-            {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
+                        {/* Filter and Search Bar - Element 4 */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 animate-stagger-4">
               {/* Filter Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
                 <button
@@ -1525,7 +1541,7 @@ export default function CandidateProfile() {
 
             {/* Interviews List */}
             {isLoadingInterviews ? (
-              <div className="py-20 text-center bg-[#151e32]/40 border border-slate-700/60 rounded-3xl">
+              <div className="py-20 text-center bg-[#151e32]/40 border border-slate-700/60 rounded-3xl animate-stagger-5">
                 <Loader2 size={36} className="animate-spin text-indigo-400 mx-auto mb-3" />
                 <p className="text-slate-400 text-sm">Loading your interview sessions...</p>
               </div>
@@ -1540,7 +1556,7 @@ export default function CandidateProfile() {
 
               if (filtered.length === 0) {
                 return (
-                  <div className="text-center py-16 bg-[#151e32]/40 border border-slate-700/60 rounded-3xl p-8">
+                  <div className="text-center py-16 bg-[#151e32]/40 border border-slate-700/60 rounded-3xl p-8 animate-stagger-5">
                     <div className="w-16 h-16 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-400 border border-indigo-500/20">
                       <List size={32} />
                     </div>
@@ -1551,7 +1567,7 @@ export default function CandidateProfile() {
                         : 'You haven\'t completed any technical interviews yet. Enter an interview access code on the dashboard to get started!'}
                     </p>
                     <button
-                      onClick={() => { setInterviewSearch(''); setInterviewFilter('all'); setActiveTab('dashboard'); }}
+                      onClick={() => { setInterviewSearch(''); setInterviewFilter('all'); setActiveTab('dashboard'); setDashboardAnimKey(k => k + 1); }}
                       className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
                     >
                       <Play size={14} fill="white" />
@@ -1563,7 +1579,7 @@ export default function CandidateProfile() {
 
               return (
                 <div className="space-y-4">
-                  {filtered.map(interview => {
+                  {filtered.map((interview, idx) => {
                     const isShortlisted = interview.status === 'shortlisted';
                     const isCompleted = interview.status === 'completed' || isShortlisted;
                     const hasEvaluations = interview.evaluations && interview.evaluations.length > 0;
@@ -1571,9 +1587,10 @@ export default function CandidateProfile() {
                     const flagCount = interview.proctoringFlags ? interview.proctoringFlags.length : 0;
 
                     return (
-                      <div
+                                            <div
                         key={interview.id}
-                        className={`bg-[#151e32] border rounded-3xl p-6 transition-all duration-200 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:translate-y-[-2px] ${
+                        style={{ animationDelay: `${0.55 + Math.min(idx, 8) * 0.08}s` }}
+                        className={`bg-[#151e32] border rounded-3xl p-6 transition-all duration-200 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:translate-y-[-2px] animate-stagger-card ${
                           isShortlisted
                             ? 'border-emerald-500/50 hover:border-emerald-500 bg-gradient-to-r from-[#151e32] to-emerald-950/20 shadow-emerald-950/20'
                             : 'border-slate-700/80 hover:border-indigo-500/60'
