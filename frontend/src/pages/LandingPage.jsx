@@ -66,9 +66,20 @@ export default function LandingPage() {
   const isVisible = (id) => !!revealedSections[id];
 
   const handleCopyDemoPIN = () => {
-    navigator.clipboard.writeText("849201");
-    setCopiedPIN(true);
-    setTimeout(() => setCopiedPIN(false), 2000);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText("849201")
+        .then(() => {
+          setCopiedPIN(true);
+          setTimeout(() => setCopiedPIN(false), 2000);
+        })
+        .catch(() => {
+          setCopiedPIN(true);
+          setTimeout(() => setCopiedPIN(false), 2000);
+        });
+    } else {
+      setCopiedPIN(true);
+      setTimeout(() => setCopiedPIN(false), 2000);
+    }
   };
 
   const toggleFaq = (index) => {

@@ -21,9 +21,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 
-env_path = r'D:\MCA Major Project\HireVision\.env'
-load_dotenv(dotenv_path=env_path)
-# Also load backend/.env if present so credentials work in either location
+# Dynamically resolve root and backend environment configurations across Windows/Linux/Render
+root_env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+if os.path.exists(root_env_path):
+    load_dotenv(dotenv_path=root_env_path)
+
 backend_env_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(backend_env_path):
     load_dotenv(dotenv_path=backend_env_path)
